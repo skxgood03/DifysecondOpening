@@ -11,6 +11,7 @@ from extensions.ext_database import db
 from models.dataset import Dataset, Document
 from services.feature_service import FeatureService
 
+
 # 使用Celery装饰器定义一个异步任务，指定队列为'dataset'
 @shared_task(queue='dataset')
 def document_indexing_task(dataset_id: str, document_ids: list):
