@@ -100,6 +100,7 @@ class MessageListApi(WebApiResource):
 
 class MessageFeedbackApi(WebApiResource):
     def post(self, app_model, end_user, message_id):
+
         message_id = str(message_id)
 
         parser = reqparse.RequestParser()

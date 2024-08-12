@@ -101,35 +101,36 @@ class DatasetListApi(Resource):
         }
         return response, 200
 
-    @setup_required
-    @login_required
-    @account_initialization_required
+    @setup_required  # 确保系统已经初始化
+    @login_required  # 确保用户已经登录
+    @account_initialization_required  # 确保用户已经初始化
     def post(self):
+        # 创建请求参数解析器
         parser = reqparse.RequestParser()
         parser.add_argument('name', nullable=False, required=True,
                             help='type is required. Name must be between 1 to 40 characters.',
-                            type=_validate_name)
+                            type=_validate_name)  # 添加请求参数
         parser.add_argument('indexing_technique', type=str, location='json',
                             choices=Dataset.INDEXING_TECHNIQUE_LIST,
                             nullable=True,
-                            help='Invalid indexing technique.')
-        args = parser.parse_args()
+                            help='Invalid indexing technique.')  # 添加请求参数
+        args = parser.parse_args()  # 解析请求参数
 
         # The role of the current user in the ta table must be admin, owner, or editor, or dataset_operator
         if not current_user.is_dataset_editor:
             raise Forbidden()
 
         try:
-            dataset = DatasetService.create_empty_dataset(
-                tenant_id=current_user.current_tenant_id,
-                name=args['name'],
-                indexing_technique=args['indexing_technique'],
-                account=current_user
+            dataset = DatasetService.create_empty_dataset(  # 创建空白知识库
+                tenant_id=current_user.current_tenant_id,  # 租户ID
+                name=args['name'],  # 名称
+                indexing_technique=args['indexing_technique'],  # 索引技术
+                account=current_user  # 用户
             )
         except services.errors.dataset.DatasetNameDuplicateError:
             raise DatasetNameDuplicateError()
 
-        return marshal(dataset, dataset_detail_fields), 201
+        return marshal(dataset, dataset_detail_fields), 201  # 返回数据集详情
 
 
 class DatasetApi(Resource):
@@ -185,12 +186,18 @@ class DatasetApi(Resource):
     @login_required
     @account_initialization_required
     def patch(self, dataset_id):
+        """
+        主要实现了对数据集信息的更新操作，包括名称、描述、索引技术、权限设置等，并检查了当前用户是否有权进行这些更改。同时，它还处理了数据集的部分成员权限更新逻辑。
+        """
+        print('修改数据')
+
         dataset_id_str = str(dataset_id)
         dataset = DatasetService.get_dataset(dataset_id_str)
         if dataset is None:
             raise NotFound("Dataset not found.")
 
         parser = reqparse.RequestParser()
+        # 验证数据是否合规
         parser.add_argument('name', nullable=False,
                             help='type is required. Name must be between 1 to 40 characters.',
                             type=_validate_name)
@@ -221,28 +228,32 @@ class DatasetApi(Resource):
                                                          )
 
         # The role of the current user in the ta table must be admin, owner, editor, or dataset_operator
+        # # 验证当前用户在数据集中的角色是否具有修改权限
         DatasetPermissionService.check_permission(
             current_user, dataset, data.get('permission'), data.get('partial_member_list')
         )
-
+        # 更新数据集信息
         dataset = DatasetService.update_dataset(
             dataset_id_str, args, current_user)
 
         if dataset is None:
             raise NotFound("Dataset not found.")
-
+        # 使用marshal将数据集对象转换为特定字段的字典
         result_data = marshal(dataset, dataset_detail_fields)
         tenant_id = current_user.current_tenant_id
 
+        # 如果权限设置为'partial_members'并且提供了部分成员列表，则更新部分成员列表
         if data.get('partial_member_list') and data.get('permission') == 'partial_members':
             DatasetPermissionService.update_partial_member_list(
                 tenant_id, dataset_id_str, data.get('partial_member_list')
             )
         # clear partial member list when permission is only_me or all_team_members
         elif data.get('permission') == 'only_me' or data.get('permission') == 'all_team_members':
-            DatasetPermissionService.clear_partial_member_list(dataset_id_str)
 
+            DatasetPermissionService.clear_partial_member_list(dataset_id_str)
+        # 获取数据集的部分成员列表
         partial_member_list = DatasetPermissionService.get_dataset_partial_member_list(dataset_id_str)
+        # 将部分成员列表添加到结果数据中
         result_data.update({'partial_member_list': partial_member_list})
 
         return result_data, 200
@@ -253,11 +264,12 @@ class DatasetApi(Resource):
     def delete(self, dataset_id):
         dataset_id_str = str(dataset_id)
 
-        # The role of the current user in the ta table must be admin, owner, or editor
+        # 验证角色是否是管理员
         if not current_user.is_editor or current_user.is_dataset_operator:
             raise Forbidden()
 
         try:
+            # 删除
             if DatasetService.delete_dataset(dataset_id_str, current_user):
                 DatasetPermissionService.clear_partial_member_list(dataset_id_str)
                 return {'result': 'success'}, 204
@@ -265,6 +277,7 @@ class DatasetApi(Resource):
                 raise NotFound("Dataset not found.")
         except services.errors.dataset.DatasetInUseError:
             raise DatasetInUseError()
+
 
 class DatasetUseCheckApi(Resource):
     @setup_required
@@ -275,6 +288,7 @@ class DatasetUseCheckApi(Resource):
 
         dataset_is_using = DatasetService.dataset_use_check(dataset_id_str)
         return {'is_using': dataset_is_using}, 200
+
 
 class DatasetQueryApi(Resource):
 
@@ -580,6 +594,7 @@ class DatasetRetrievalSettingMockApi(Resource):
                     ]
                 }
             case VectorType.QDRANT | VectorType.WEAVIATE | VectorType.OPENSEARCH| VectorType.ANALYTICDB | VectorType.MYSCALE | VectorType.ORACLE:
+
                 return {
                     'retrieval_method': [
                         RetrievalMethod.SEMANTIC_SEARCH.value,
@@ -589,7 +604,6 @@ class DatasetRetrievalSettingMockApi(Resource):
                 }
             case _:
                 raise ValueError(f"Unsupported vector db type {vector_type}.")
-
 
 
 class DatasetErrorDocs(Resource):

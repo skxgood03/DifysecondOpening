@@ -282,7 +282,9 @@ class DatasetInitApi(Resource):
         # The role of the current user in the ta table must be admin, owner, or editor
         if not current_user.is_editor:
             raise Forbidden()
-
+        #解析请求中的参数，包括索引技术、(indexing_technique)、
+        # 数据源(data_source)、处理规则(process_rule)、文档形式(doc_form)、
+        # 文档语言(doc_language)和检索模型(retrieval_model)。
         parser = reqparse.RequestParser()
         parser.add_argument('indexing_technique', type=str, choices=Dataset.INDEXING_TECHNIQUE_LIST, required=True,
                             nullable=False, location='json')
@@ -298,7 +300,7 @@ class DatasetInitApi(Resource):
         # The role of the current user in the ta table must be admin, owner, or editor, or dataset_operator
         if not current_user.is_dataset_editor:
             raise Forbidden()
-
+        #如果索引技术是'high_quality'，则会尝试获取默认的嵌入模型实例。
         if args['indexing_technique'] == 'high_quality':
             try:
                 model_manager = ModelManager()
@@ -313,10 +315,11 @@ class DatasetInitApi(Resource):
             except ProviderTokenNotInitError as ex:
                 raise ProviderNotInitializeError(ex.description)
 
-        # validate args
+        # 验证参数
         DocumentService.document_create_args_validate(args)
 
         try:
+            #创建一个新的数据集并在其中保存文档。
             dataset, documents, batch = DocumentService.save_document_without_dataset_id(
                 tenant_id=current_user.current_tenant_id,
                 document_data=args,
@@ -329,6 +332,7 @@ class DatasetInitApi(Resource):
         except ModelCurrentlyNotSupportError:
             raise ProviderModelCurrentlyNotSupportError()
 
+        #返回一个包含新创建的数据集、文档和批次信息的响应
         response = {
             'dataset': dataset,
             'documents': documents,

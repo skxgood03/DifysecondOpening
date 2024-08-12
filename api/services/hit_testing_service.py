@@ -23,6 +23,16 @@ default_retrieval_model = {
 class HitTestingService:
     @classmethod
     def retrieve(cls, dataset: Dataset, query: str, account: Account, retrieval_model: dict, limit: int = 10) -> dict:
+        """
+        执行命中测试的检索操作。
+
+        :param dataset: 数据集对象。
+        :param query: 查询字符串。
+        :param account: 用户账户对象。
+        :param retrieval_model: 检索模型配置字典。
+        :param limit: 返回结果的最大数量，默认为10。
+        :return: 包含查询和检索结果的字典。
+        """# 如果数据集中可用的文档或段落数量为0，则直接返回空结果
         if dataset.available_document_count == 0 or dataset.available_segment_count == 0:
             return {
                 "query": {
@@ -34,10 +44,10 @@ class HitTestingService:
 
         start = time.perf_counter()
 
-        # get retrieval model , if the model is not setting , using default
+        #  # 如果没有提供检索模型，则使用数据集默认的检索模型，如果没有则使用全局默认模型
         if not retrieval_model:
             retrieval_model = dataset.retrieval_model if dataset.retrieval_model else default_retrieval_model
-
+        # 使用检索服务执行检索操作
         all_documents = RetrievalService.retrieve(retrival_method=retrieval_model.get('search_method', 'semantic_search'),
                                                   dataset_id=dataset.id,
                                                   query=cls.escape_query_for_search(query),
@@ -52,7 +62,7 @@ class HitTestingService:
 
         end = time.perf_counter()
         logging.debug(f"Hit testing retrieve in {end - start:0.4f} seconds")
-
+        # 创建数据集查询记录
         dataset_query = DatasetQuery(
             dataset_id=dataset.id,
             content=query,
@@ -60,10 +70,10 @@ class HitTestingService:
             created_by_role='account',
             created_by=account.id
         )
-
+        # 将查询记录添加到数据库会话并提交
         db.session.add(dataset_query)
         db.session.commit()
-
+        # 返回紧凑的检索响应
         return cls.compact_retrieve_response(dataset, query, all_documents)
 
     @classmethod

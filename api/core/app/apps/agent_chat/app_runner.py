@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class AgentChatAppRunner(AppRunner):
     """
-    Agent Application Runner
+    代理应用程序运行器
     """
 
     def run(
@@ -36,20 +36,22 @@ class AgentChatAppRunner(AppRunner):
         message: Message,
     ) -> None:
         """
-        Run assistant application
-        :param application_generate_entity: application generate entity
-        :param queue_manager: application queue manager
-        :param conversation: conversation
-        :param message: message
-        :return:
+        运行助手应用程序
+
+        :param application_generate_entity: 应用生成实体
+        :param queue_manager: 应用队列管理器
+        :param conversation: 会话
+        :param message: 消息
         """
+
+        # 获取应用配置
         app_config = application_generate_entity.app_config
         app_config = cast(AgentChatAppConfig, app_config)
-
+        # 查询数据库获取应用记录
         app_record = db.session.query(App).filter(App.id == app_config.app_id).first()
         if not app_record:
             raise ValueError("App not found")
-
+        # 获取输入、查询和文件
         inputs = application_generate_entity.inputs
         query = application_generate_entity.query
         files = application_generate_entity.files
@@ -59,6 +61,7 @@ class AgentChatAppRunner(AppRunner):
         # If the rest number of tokens is not enough, raise exception.
         # Include: prompt template, inputs, query(optional), files(optional)
         # Not Include: memory, external data, dataset context
+        # 预计算提示消息的令牌数量，并确保剩余令牌数量足够
         self.get_pre_calculate_rest_tokens(
             app_record=app_record,
             model_config=application_generate_entity.model_conf,
@@ -67,7 +70,7 @@ class AgentChatAppRunner(AppRunner):
             files=files,
             query=query
         )
-
+        # 初始化记忆对象
         memory = None
         if application_generate_entity.conversation_id:
             # get memory of conversation (read-only)
@@ -84,6 +87,7 @@ class AgentChatAppRunner(AppRunner):
         # organize all inputs and template to prompt messages
         # Include: prompt template, inputs, query(optional), files(optional)
         #          memory(optional)
+        # 组织所有输入和模板到提示消息
         prompt_messages, _ = self.organize_prompt_messages(
             app_record=app_record,
             model_config=application_generate_entity.model_conf,
@@ -94,7 +98,7 @@ class AgentChatAppRunner(AppRunner):
             memory=memory
         )
 
-        # moderation
+        # 执行敏感词过滤
         try:
             # process sensitive_word_avoidance
             _, inputs, query = self.moderation_for_inputs(
@@ -106,6 +110,7 @@ class AgentChatAppRunner(AppRunner):
                 message_id=message.id
             )
         except ModerationException as e:
+            # 直接输出异常信息
             self.direct_output(
                 queue_manager=queue_manager,
                 app_generate_entity=application_generate_entity,
@@ -114,7 +119,7 @@ class AgentChatAppRunner(AppRunner):
                 stream=application_generate_entity.stream
             )
             return
-
+        # 检查是否有注解回复
         if query:
             # annotation reply
             annotation_reply = self.query_app_annotations_to_reply(
@@ -124,13 +129,13 @@ class AgentChatAppRunner(AppRunner):
                 user_id=application_generate_entity.user_id,
                 invoke_from=application_generate_entity.invoke_from
             )
-
+            # 发布注解回复事件
             if annotation_reply:
                 queue_manager.publish(
                     QueueAnnotationReplyEvent(message_annotation_id=annotation_reply.id),
                     PublishFrom.APPLICATION_MANAGER
                 )
-
+                # 直接输出注解回复内容
                 self.direct_output(
                     queue_manager=queue_manager,
                     app_generate_entity=application_generate_entity,
@@ -140,7 +145,7 @@ class AgentChatAppRunner(AppRunner):
                 )
                 return
 
-        # fill in variable inputs from external data tools if exists
+        # 从外部数据工具填充输入变量
         external_data_tools = app_config.external_data_variables
         if external_data_tools:
             inputs = self.fill_in_inputs_from_external_data_tools(
@@ -154,6 +159,7 @@ class AgentChatAppRunner(AppRunner):
         # reorganize all inputs and template to prompt messages
         # Include: prompt template, inputs, query(optional), files(optional)
         #          memory(optional), external data, dataset context(optional)
+        # 重新组织所有输入和模板到提示消息
         prompt_messages, _ = self.organize_prompt_messages(
             app_record=app_record,
             model_config=application_generate_entity.model_conf,
@@ -164,7 +170,7 @@ class AgentChatAppRunner(AppRunner):
             memory=memory
         )
 
-        # check hosting moderation
+        # 检查托管审核
         hosting_moderation_result = self.check_hosting_moderation(
             application_generate_entity=application_generate_entity,
             queue_manager=queue_manager,
@@ -176,15 +182,15 @@ class AgentChatAppRunner(AppRunner):
 
         agent_entity = app_config.agent
 
-        # load tool variables
+        # # 加载工具变量
         tool_conversation_variables = self._load_tool_variables(conversation_id=conversation.id,
                                                    user_id=application_generate_entity.user_id,
                                                    tenant_id=app_config.tenant_id)
 
-        # convert db variables to tool variables
+        # 将数据库变量转换为工具变量
         tool_variables = self._convert_db_variables_to_tool_variables(tool_conversation_variables)
 
-        # init model instance
+        # 初始化模型实例
         model_instance = ModelInstance(
             provider_model_bundle=application_generate_entity.model_conf.provider_model_bundle,
             model=application_generate_entity.model_conf.model
@@ -199,18 +205,18 @@ class AgentChatAppRunner(AppRunner):
             memory=memory,
         )
 
-        # change function call strategy based on LLM model
+        # 确定函数调用策略
         llm_model = cast(LargeLanguageModel, model_instance.model_type_instance)
         model_schema = llm_model.get_model_schema(model_instance.model, model_instance.credentials)
 
         if {ModelFeature.MULTI_TOOL_CALL, ModelFeature.TOOL_CALL}.intersection(model_schema.features or []):
             agent_entity.strategy = AgentEntity.Strategy.FUNCTION_CALLING
-
+        # 重新加载会话和消息
         conversation = db.session.query(Conversation).filter(Conversation.id == conversation.id).first()
         message = db.session.query(Message).filter(Message.id == message.id).first()
         db.session.close()
 
-        # start agent runner
+        # 根据策略选择运行器
         if agent_entity.strategy == AgentEntity.Strategy.CHAIN_OF_THOUGHT:
             # check LLM mode
             if model_schema.model_properties.get(ModelPropertyKey.MODE) == LLMMode.CHAT.value:
@@ -223,7 +229,7 @@ class AgentChatAppRunner(AppRunner):
             runner_cls = FunctionCallAgentRunner
         else:
             raise ValueError(f"Invalid agent strategy: {agent_entity.strategy}")
-
+        # 初始化运行器
         runner = runner_cls(
             tenant_id=app_config.tenant_id,
             application_generate_entity=application_generate_entity,
@@ -240,14 +246,14 @@ class AgentChatAppRunner(AppRunner):
             db_variables=tool_conversation_variables,
             model_instance=model_instance
         )
-
+        # 运行代理
         invoke_result = runner.run(
             message=message,
             query=query,
             inputs=inputs,
         )
 
-        # handle invoke result
+        # 处理调用结果
         self._handle_invoke_result(
             invoke_result=invoke_result,
             queue_manager=queue_manager,

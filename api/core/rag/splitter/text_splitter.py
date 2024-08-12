@@ -112,6 +112,7 @@ class TextSplitter(BaseDocumentTransformer, ABC):
     def _merge_splits(self, splits: Iterable[str], separator: str) -> list[str]:
         # We now want to combine these smaller pieces into medium size
         # chunks to send to the LLM.
+        #通过 Tokenizer 来计算字符串占用的 token 个数
         separator_len = self._length_function(separator)
 
         docs = []
@@ -494,37 +495,54 @@ class RecursiveCharacterTextSplitter(TextSplitter):
         self._separators = separators or ["\n\n", "\n", " ", ""]
 
     def _split_text(self, text: str, separators: list[str]) -> list[str]:
-        """Split incoming text and return chunks."""
-        final_chunks = []
-        # Get appropriate separator to use
-        separator = separators[-1]
-        new_separators = []
-        for i, _s in enumerate(separators):
-            if _s == "":
-                separator = _s
-                break
-            if re.search(_s, text):
-                separator = _s
-                new_separators = separators[i + 1:]
-                break
+        """
+        将输入文本按照给定的分隔符分割成块，并递归地处理过长的文本块。
 
+        :param text: 待分割的原始文本
+        :param separators: 可选的分隔符列表，用于文本分割
+        :return: 分割后的文本块列表
+        此段代码实现了一个文本分割算法，主要逻辑如下：
+
+        从给定的分隔符列表中选择一个有效的分隔符，用于分割文本。
+        使用选定的分隔符将文本分割成多个部分。
+        遍历分割后的每一部分，如果部分的长度小于设定的块大小，将其标记为合适的短文本块；否则，如果还有其他分隔符可用，递归地继续分割这部分文本；如果没有其他分隔符，直接将这部分文本作为块添加到最终结果中。
+        在每次处理完一个长文本块后，将之前累积的短文本块合并，并添加到最终的文本块列表中。
+        最终返回分割后的所有文本块组成的列表。
+        """
+        """Split incoming text and return chunks."""
+        final_chunks = []  # 初始化最终的文本块列表
+        # 从separators中选取一个有效的分隔符
+        separator = separators[-1]  # 默认使用最后一个分隔符
+        new_separators = []  # 初始化新的分隔符列表
+        for i, _s in enumerate(separators):
+            if _s == "":  # 初始化新的分隔符列表
+                separator = _s
+                break
+            if re.search(_s, text):# 如果当前分隔符在文本中存在
+                separator = _s# 使用这个分隔符
+                new_separators = separators[i + 1:] # 更新新的分隔符列表
+                break
+        # 使用选定的分隔符分割文本
         splits = _split_text_with_regex(text, separator, self._keep_separator)
-        # Now go merging things, recursively splitting longer texts.
-        _good_splits = []
-        _separator = "" if self._keep_separator else separator
+        # # 合并短文本块，递归分割长文本块
+        _good_splits = [] # 初始化合适的短文本块列表
+        _separator = "" if self._keep_separator else separator # 确定是否保留分隔符
         for s in splits:
-            if self._length_function(s) < self._chunk_size:
-                _good_splits.append(s)
+            if self._length_function(s) < self._chunk_size:  # 如果文本块长度小于设定的块大小
+                _good_splits.append(s) # 将其添加到合适的短文本块列表
             else:
-                if _good_splits:
-                    merged_text = self._merge_splits(_good_splits, _separator)
-                    final_chunks.extend(merged_text)
-                    _good_splits = []
+                if _good_splits:  # 如果有合适的短文本块
+                    merged_text = self._merge_splits(_good_splits, _separator) # 合并它们
+                    final_chunks.extend(merged_text)  # 将合并后的文本块添加到最终的文本块列表
+                    _good_splits = [] # 清空短文本块列表
+                # 如果没有新的分隔符，直接将当前过长的文本块添加到最终列表
                 if not new_separators:
                     final_chunks.append(s)
                 else:
+                    # 如果有新的分隔符，递归地分割当前过长的文本块
                     other_info = self._split_text(s, new_separators)
-                    final_chunks.extend(other_info)
+                    final_chunks.extend(other_info) # 将递归分割的结果添加到最终列表
+        # 最后处理剩余的合适短文本块
         if _good_splits:
             merged_text = self._merge_splits(_good_splits, _separator)
             final_chunks.extend(merged_text)

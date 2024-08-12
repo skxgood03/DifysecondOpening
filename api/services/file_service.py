@@ -31,48 +31,52 @@ class FileService:
 
     @staticmethod
     def upload_file(file: FileStorage, user: Union[Account, EndUser], only_image: bool = False) -> UploadFile:
+        # 获取文件名和扩展名
         filename = file.filename
         extension = file.filename.split('.')[-1]
+        # 如果文件名过长，截断并保留扩展名
         if len(filename) > 200:
             filename = filename.split('.')[0][:200] + '.' + extension
+        # 根据配置获取允许的文件类型
         etl_type = dify_config.ETL_TYPE
         allowed_extensions = UNSTRUCTURED_ALLOWED_EXTENSIONS + IMAGE_EXTENSIONS if etl_type == 'Unstructured' \
             else ALLOWED_EXTENSIONS + IMAGE_EXTENSIONS
+        # 检查文件类型是否在允许的范围内
         if extension.lower() not in allowed_extensions:
             raise UnsupportedFileTypeError()
         elif only_image and extension.lower() not in IMAGE_EXTENSIONS:
             raise UnsupportedFileTypeError()
 
-        # read file content
+        #  # 读取文件内容
         file_content = file.read()
 
-        # get file size
+        # 获取文件大小
         file_size = len(file_content)
-
+        # 设置文件大小限制，图片文件和非图片文件有不同的限制
         if extension.lower() in IMAGE_EXTENSIONS:
             file_size_limit = dify_config.UPLOAD_IMAGE_FILE_SIZE_LIMIT * 1024 * 1024
         else:
             file_size_limit = dify_config.UPLOAD_FILE_SIZE_LIMIT * 1024 * 1024
-
+        # 检查文件大小是否超过限制
         if file_size > file_size_limit:
             message = f'File size exceeded. {file_size} > {file_size_limit}'
             raise FileTooLargeError(message)
 
-        # user uuid as file name
+        # 生成文件的唯一UUID
         file_uuid = str(uuid.uuid4())
-
+        # 确定当前租户ID
         if isinstance(user, Account):
             current_tenant_id = user.current_tenant_id
         else:
             # end_user
             current_tenant_id = user.tenant_id
-
+        # 构建文件在存储系统中的路径
         file_key = 'upload_files/' + current_tenant_id + '/' + file_uuid + '.' + extension
 
-        # save file to storage
+        #  # 保存文件到存储系统
         storage.save(file_key, file_content)
 
-        # save file to db
+        #  # 创建UploadFile模型实例，并填充必要的字段
         upload_file = UploadFile(
             tenant_id=current_tenant_id,
             storage_type=dify_config.STORAGE_TYPE,

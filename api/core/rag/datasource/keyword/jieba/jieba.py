@@ -132,19 +132,20 @@ class Jieba(BaseKeyword):
                 storage.delete(file_key)
             storage.save(file_key, json.dumps(keyword_table_dict, cls=SetEncoder).encode('utf-8'))
 
-    def _get_dataset_keyword_table(self) -> Optional[dict]:
-        dataset_keyword_table = self.dataset.dataset_keyword_table
-        if dataset_keyword_table:
-            keyword_table_dict = dataset_keyword_table.keyword_table_dict
-            if keyword_table_dict:
-                return keyword_table_dict['__data__']['table']
-        else:
-            keyword_data_source_type = dify_config.KEYWORD_DATA_SOURCE_TYPE
+    def _get_dataset_keyword_table(self) -> Optional[dict]: # 获取数据集关键词表
+        dataset_keyword_table = self.dataset.dataset_keyword_table  # 获取数据集关键词表
+        if dataset_keyword_table:  # 如果数据集关键词表存在
+            keyword_table_dict = dataset_keyword_table.keyword_table_dict # 获取关键词表字典
+            if keyword_table_dict: # 如果关键词表字典存在
+                return keyword_table_dict['__data__']['table'] # 返回关键词表
+        else:  # 如果数据集关键词表不存在
+            keyword_data_source_type = dify_config.KEYWORD_DATA_SOURCE_TYPE # 获取关键词数据源类型
             dataset_keyword_table = DatasetKeywordTable(
                 dataset_id=self.dataset.id,
                 keyword_table='',
                 data_source_type=keyword_data_source_type,
             )
+            # 创建数据集关键词表
             if keyword_data_source_type == 'database':
                 dataset_keyword_table.keyword_table = json.dumps({
                     '__type__': 'keyword_table',
@@ -153,7 +154,7 @@ class Jieba(BaseKeyword):
                         "summary": None,
                         "table": {}
                     }
-                }, cls=SetEncoder)
+                }, cls=SetEncoder) # 设置关键词表
             db.session.add(dataset_keyword_table)
             db.session.commit()
 

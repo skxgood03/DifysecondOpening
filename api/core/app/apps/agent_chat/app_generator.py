@@ -35,60 +35,63 @@ class AgentChatAppGenerator(MessageBasedAppGenerator):
                  stream: bool = True) \
             -> Union[dict, Generator[dict, None, None]]:
         """
-        Generate App response.
+        生成应用响应。
 
-        :param app_model: App
-        :param user: account or end user
-        :param args: request args
-        :param invoke_from: invoke from source
-        :param stream: is stream
+        :param app_model: 应用模型
+        :param user: 账户或终端用户
+        :param args: 请求参数
+        :param invoke_from: 调用来源
+        :param stream: 是否流式传输
         """
+
+        # 如果不支持流式传输，则抛出错误
         if not stream:
             raise ValueError('Agent Chat App does not support blocking mode')
-
+        # 验证查询参数是否存在
         if not args.get('query'):
             raise ValueError('query is required')
-
+        # 获取并验证查询参数
         query = args['query']
         if not isinstance(query, str):
             raise ValueError('query must be a string')
-
+        # 清理查询字符串中的空字符
         query = query.replace('\x00', '')
+        # 获取输入参数
         inputs = args['inputs']
-
+        # 设置额外参数
         extras = {
             "auto_generate_conversation_name": args.get('auto_generate_name', True)
         }
 
-        # get conversation
+        # 根据用户和会话ID获取会话
         conversation = None
         if args.get('conversation_id'):
             conversation = self._get_conversation_by_user(app_model, args.get('conversation_id'), user)
 
-        # get app model config
+        # 获取应用模型配置
         app_model_config = self._get_app_model_config(
             app_model=app_model,
             conversation=conversation
         )
 
-        # validate override model config
+        # 验证并处理覆盖模型配置
         override_model_config_dict = None
         if args.get('model_config'):
             if invoke_from != InvokeFrom.DEBUGGER:
                 raise ValueError('Only in App debug mode can override model config')
 
-            # validate config
+            # 验证配置
             override_model_config_dict = AgentChatAppConfigManager.config_validate(
                 tenant_id=app_model.tenant_id,
                 config=args.get('model_config')
             )
 
-            # always enable retriever resource in debugger mode
+            # 在调试模式下始终启用检索器资源
             override_model_config_dict["retriever_resource"] = {
                 "enabled": True
             }
 
-        # parse files
+        # 处理文件参数
         files = args['files'] if args.get('files') else []
         message_file_parser = MessageFileParser(tenant_id=app_model.tenant_id, app_id=app_model.id)
         file_extra_config = FileUploadConfigManager.convert(override_model_config_dict or app_model_config.to_dict())
@@ -101,7 +104,7 @@ class AgentChatAppGenerator(MessageBasedAppGenerator):
         else:
             file_objs = []
 
-        # convert to app config
+        # 转换为应用配置
         app_config = AgentChatAppConfigManager.get_app_config(
             app_model=app_model,
             app_model_config=app_model_config,
@@ -109,11 +112,11 @@ class AgentChatAppGenerator(MessageBasedAppGenerator):
             override_config_dict=override_model_config_dict
         )
 
-        # get tracing instance
+        # 获取追踪实例
         user_id = user.id if isinstance(user, Account) else user.session_id
         trace_manager = TraceQueueManager(app_model.id, user_id)
 
-        # init application generate entity
+        # 初始化应用生成实体
         application_generate_entity = AgentChatAppGenerateEntity(
             task_id=str(uuid.uuid4()),
             app_config=app_config,
@@ -130,13 +133,13 @@ class AgentChatAppGenerator(MessageBasedAppGenerator):
             trace_manager=trace_manager
         )
 
-        # init generate records
+        # 初始化生成记录s
         (
             conversation,
             message
         ) = self._init_generate_records(application_generate_entity, conversation)
 
-        # init queue manager
+        # 初始化队列管理器
         queue_manager = MessageBasedAppQueueManager(
             task_id=application_generate_entity.task_id,
             user_id=application_generate_entity.user_id,
@@ -146,7 +149,7 @@ class AgentChatAppGenerator(MessageBasedAppGenerator):
             message_id=message.id
         )
 
-        # new thread
+        # 创建新线程执行生成工作
         worker_thread = threading.Thread(target=self._generate_worker, kwargs={
             'flask_app': current_app._get_current_object(),
             'application_generate_entity': application_generate_entity,
@@ -157,7 +160,7 @@ class AgentChatAppGenerator(MessageBasedAppGenerator):
 
         worker_thread.start()
 
-        # return response or stream generator
+        # 处理并返回响应或流生成器
         response = self._handle_response(
             application_generate_entity=application_generate_entity,
             queue_manager=queue_manager,
@@ -166,18 +169,18 @@ class AgentChatAppGenerator(MessageBasedAppGenerator):
             user=user,
             stream=stream,
         )
-
+        # 将响应转换为适当格式并返回
         return AgentChatAppGenerateResponseConverter.convert(
             response=response,
             invoke_from=invoke_from
         )
 
     def _generate_worker(
-        self, flask_app: Flask,
-        application_generate_entity: AgentChatAppGenerateEntity,
-        queue_manager: AppQueueManager,
-        conversation_id: str,
-        message_id: str,
+            self, flask_app: Flask,
+            application_generate_entity: AgentChatAppGenerateEntity,
+            queue_manager: AppQueueManager,
+            conversation_id: str,
+            message_id: str,
     ) -> None:
         """
         Generate worker in a new thread.

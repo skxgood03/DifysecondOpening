@@ -95,6 +95,9 @@ class Vector:
     def create(self, texts: list = None, **kwargs):
         if texts:
             embeddings = self._embeddings.embed_documents([document.page_content for document in texts])
+            # print(embeddings)
+            #[[-02222,....]] 返回向量值 每段是每个列表
+
             self._vector_processor.create(
                 texts=texts,
                 embeddings=embeddings,
@@ -168,3 +171,8 @@ class Vector:
                 return method
 
         raise AttributeError(f"'vector_processor' object has no attribute '{name}'")
+
+
+class MeilisertchCls:
+    def __init__(self):
+        pass

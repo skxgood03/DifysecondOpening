@@ -221,21 +221,29 @@ class DatasetService:
 
     @staticmethod
     def update_dataset(dataset_id, data, user):
+        # 清理数据中的'partial_member_list'键，如果存在
         data.pop('partial_member_list', None)
+        # 过滤data字典，移除值为None的键，除了'description'键
         filtered_data = {k: v for k, v in data.items() if v is not None or k == 'description'}
+        # 从DatasetService获取指定ID的数据集
         dataset = DatasetService.get_dataset(dataset_id)
+        # 检查用户是否有权限操作此数据集
         DatasetService.check_dataset_permission(dataset, user)
+        # 初始化action变量
         action = None
+        # 检查indexing_technique是否改变
         if dataset.indexing_technique != data['indexing_technique']:
-            # if update indexing_technique
+            # 如果切换到'economy'模式
             if data['indexing_technique'] == 'economy':
                 action = 'remove'
+                # 清空与embedding相关的字段
                 filtered_data['embedding_model'] = None
                 filtered_data['embedding_model_provider'] = None
                 filtered_data['collection_binding_id'] = None
+            # 如果切换到'high_quality'模式
             elif data['indexing_technique'] == 'high_quality':
                 action = 'add'
-                # get embedding model setting
+                # 获取embedding模型设置
                 try:
                     model_manager = ModelManager()
                     embedding_model = model_manager.get_model_instance(
@@ -244,6 +252,7 @@ class DatasetService:
                         model_type=ModelType.TEXT_EMBEDDING,
                         model=data['embedding_model']
                     )
+                    # 更新filtered_data字典中的embedding相关字段
                     filtered_data['embedding_model'] = embedding_model.model
                     filtered_data['embedding_model_provider'] = embedding_model.provider
                     dataset_collection_binding = DatasetCollectionBindingService.get_dataset_collection_binding(
@@ -258,11 +267,13 @@ class DatasetService:
                     )
                 except ProviderTokenNotInitError as ex:
                     raise ValueError(ex.description)
+        # 如果indexing_technique未改变，但embedding模型或提供商改变
         else:
             if data['embedding_model_provider'] != dataset.embedding_model_provider or \
                 data['embedding_model'] != dataset.embedding_model:
                 action = 'update'
                 try:
+                    # 更新embedding模型设置
                     model_manager = ModelManager()
                     embedding_model = model_manager.get_model_instance(
                         tenant_id=current_user.current_tenant_id,
@@ -270,6 +281,7 @@ class DatasetService:
                         model_type=ModelType.TEXT_EMBEDDING,
                         model=data['embedding_model']
                     )
+                    # 更新filtered_data字典中的embedding相关字段
                     filtered_data['embedding_model'] = embedding_model.model
                     filtered_data['embedding_model_provider'] = embedding_model.provider
                     dataset_collection_binding = DatasetCollectionBindingService.get_dataset_collection_binding(
@@ -284,16 +296,17 @@ class DatasetService:
                     )
                 except ProviderTokenNotInitError as ex:
                     raise ValueError(ex.description)
-
+        # 更新更新者和更新时间
         filtered_data['updated_by'] = user.id
         filtered_data['updated_at'] = datetime.datetime.now()
 
-        # update Retrieval model
+        # 更新Retrieval model
         filtered_data['retrieval_model'] = data['retrieval_model']
-
+        # 使用过滤后的数据更新数据集
         dataset.query.filter_by(id=dataset_id).update(filtered_data)
 
         db.session.commit()
+        # 如果有action，则异步处理向量索引任务
         if action:
             deal_dataset_vector_index_task.delay(dataset_id, action)
         return dataset
@@ -662,8 +675,17 @@ class DocumentService:
         account: Account, dataset_process_rule: Optional[DatasetProcessRule] = None,
         created_from: str = 'web'
     ):
+        """
+           保存文档到指定数据集，并处理各种数据源类型，包括上传文件、Notion导入和网站抓取。
 
-        # check document limit
+           :param dataset: 数据集对象。
+           :param document_data: 包含文档数据和元数据的字典。
+           :param account: 用户账户对象。
+           :param dataset_process_rule: 可选的数据集处理规则对象。
+           :param created_from: 创建文档的来源，例如 'web'。
+           :return: 一个包含已保存文档的列表和批次标识符的元组。
+           """
+        # 验证并处理文档数量限制
         features = FeatureService.get_features(current_user.current_tenant_id)
 
         if features.billing.enabled:
@@ -685,10 +707,10 @@ class DocumentService:
 
                 DocumentService.check_documents_upload_quota(count, features)
 
-        # if dataset is empty, update dataset data_source_type
+        #  # 更新数据集的数据源类型
         if not dataset.data_source_type:
             dataset.data_source_type = document_data["data_source"]["type"]
-
+        # 设置索引技术
         if not dataset.indexing_technique:
             if 'indexing_technique' not in document_data \
                 or document_data['indexing_technique'] not in Dataset.INDEXING_TECHNIQUE_LIST:
@@ -696,18 +718,24 @@ class DocumentService:
 
             dataset.indexing_technique = document_data["indexing_technique"]
             if document_data["indexing_technique"] == 'high_quality':
+                # 获取模型管理器实例
                 model_manager = ModelManager()
+                # 获取默认的文本嵌入模型实例
                 embedding_model = model_manager.get_default_model_instance(
                     tenant_id=current_user.current_tenant_id,
                     model_type=ModelType.TEXT_EMBEDDING
                 )
+                # 设置数据集的嵌入模型和提供商信息
                 dataset.embedding_model = embedding_model.model
                 dataset.embedding_model_provider = embedding_model.provider
+                # 获取与嵌入模型绑定的数据集集合绑定
                 dataset_collection_binding = DatasetCollectionBindingService.get_dataset_collection_binding(
                     embedding_model.provider,
                     embedding_model.model
                 )
+                # 设置数据集的集合绑定ID
                 dataset.collection_binding_id = dataset_collection_binding.id
+                # 如果数据集的检索模型未设置，则设置默认的检索模型配置
                 if not dataset.retrieval_model:
                     default_retrieval_model = {
                         'search_method': RetrievalMethod.SEMANTIC_SEARCH.value,
@@ -719,20 +747,24 @@ class DocumentService:
                         'top_k': 2,
                         'score_threshold_enabled': False
                     }
-
+                    # 使用文档数据中的检索模型配置覆盖默认配置，如果存在的话
                     dataset.retrieval_model = document_data.get('retrieval_model') if document_data.get(
                         'retrieval_model'
                     ) else default_retrieval_model
-
+        # 初始化文档列表和批次标识符
         documents = []
         batch = time.strftime('%Y%m%d%H%M%S') + str(random.randint(100000, 999999))
+
+        # 根据document_data是否存在"original_document_id"字段判断是否更新已有文档
         if document_data.get("original_document_id"):
             document = DocumentService.update_document_with_dataset_id(dataset, document_data, account)
             documents.append(document)
         else:
-            # save process rule
+            #如果没有，则需要创建或者更新数据集规则
             if not dataset_process_rule:
                 process_rule = document_data["process_rule"]
+
+                # 根据process_rule的模式创建DatasetProcessRule实例
                 if process_rule["mode"] == "custom":
                     dataset_process_rule = DatasetProcessRule(
                         dataset_id=dataset.id,
@@ -747,14 +779,18 @@ class DocumentService:
                         rules=json.dumps(DatasetProcessRule.AUTOMATIC_RULES),
                         created_by=account.id
                     )
+                # 将新创建的DatasetProcessRule添加到数据库会话中
                 db.session.add(dataset_process_rule)
                 db.session.commit()
+            # 获取数据集中文档的位置信息
             position = DocumentService.get_documents_position(dataset.id)
             document_ids = []
             duplicate_document_ids = []
             if document_data["data_source"]["type"] == "upload_file":
+                # 获取文件ID列表
                 upload_file_list = document_data["data_source"]["info_list"]['file_info_list']['file_ids']
                 for file_id in upload_file_list:
+                    # 查询文件信息
                     file = db.session.query(UploadFile).filter(
                         UploadFile.tenant_id == dataset.tenant_id,
                         UploadFile.id == file_id
@@ -763,12 +799,12 @@ class DocumentService:
                     # raise error if file not found
                     if not file:
                         raise FileNotExistsError()
-
+                    # 文件名和数据源信息
                     file_name = file.name
                     data_source_info = {
                         "upload_file_id": file_id,
                     }
-                    # check duplicate
+                    # # 检查是否允许导入重复文档
                     if document_data.get('duplicate', False):
                         document = Document.query.filter_by(
                             dataset_id=dataset.id,
@@ -778,6 +814,7 @@ class DocumentService:
                             name=file_name
                         ).first()
                         if document:
+                            # 更新现有文档
                             document.dataset_process_rule_id = dataset_process_rule.id
                             document.updated_at = datetime.datetime.utcnow()
                             document.created_from = created_from
@@ -790,6 +827,7 @@ class DocumentService:
                             documents.append(document)
                             duplicate_document_ids.append(document.id)
                             continue
+                    # 创建新文档
                     document = DocumentService.build_document(
                         dataset, dataset_process_rule.id,
                         document_data["data_source"]["type"],
@@ -803,10 +841,15 @@ class DocumentService:
                     document_ids.append(document.id)
                     documents.append(document)
                     position += 1
+            # 处理Notion导入数据源
             elif document_data["data_source"]["type"] == "notion_import":
+                # 获取Notion信息列表
                 notion_info_list = document_data["data_source"]['info_list']['notion_info_list']
+                # 初始化已存在的Notion页面ID列表
                 exist_page_ids = []
+                # 初始化已存在的文档字典，键为Notion页面ID，值为文档ID
                 exist_document = {}
+                # 查询已存在的Notion导入类型的文档
                 documents = Document.query.filter_by(
                     dataset_id=dataset.id,
                     tenant_id=current_user.current_tenant_id,
@@ -815,11 +858,15 @@ class DocumentService:
                 ).all()
                 if documents:
                     for document in documents:
+                        # 解析数据源信息
                         data_source_info = json.loads(document.data_source_info)
                         exist_page_ids.append(data_source_info['notion_page_id'])
                         exist_document[data_source_info['notion_page_id']] = document.id
+                # 遍历Notion信息列表
                 for notion_info in notion_info_list:
+                    # 获取工作空间ID
                     workspace_id = notion_info['workspace_id']
+                    # 查询数据源绑定信息
                     data_source_binding = DataSourceOauthBinding.query.filter(
                         db.and_(
                             DataSourceOauthBinding.tenant_id == current_user.current_tenant_id,
@@ -829,15 +876,20 @@ class DocumentService:
                         )
                     ).first()
                     if not data_source_binding:
+                        # 如果数据源绑定不存在，抛出错误
                         raise ValueError('Data source binding not found.')
+                    # 遍历Notion页面
                     for page in notion_info['pages']:
+                        # 如果页面ID不在已存在的页面ID列表中
                         if page['page_id'] not in exist_page_ids:
+                            # 创建数据源信息字典
                             data_source_info = {
                                 "notion_workspace_id": workspace_id,
                                 "notion_page_id": page['page_id'],
                                 "notion_page_icon": page['page_icon'],
                                 "type": page['type']
                             }
+                            # 创建新文档
                             document = DocumentService.build_document(
                                 dataset, dataset_process_rule.id,
                                 document_data["data_source"]["type"],
@@ -853,12 +905,15 @@ class DocumentService:
                             position += 1
                         else:
                             exist_document.pop(page['page_id'])
-                # delete not selected documents
+                # # 删除未被选择的文档
                 if len(exist_document) > 0:
                     clean_notion_document_task.delay(list(exist_document.values()), dataset.id)
+            # 处理网站抓取数据源
             elif document_data["data_source"]["type"] == "website_crawl":
+                # 获取网站信息
                 website_info = document_data["data_source"]['info_list']['website_info_list']
                 urls = website_info['urls']
+                # 遍历URL列表
                 for url in urls:
                     data_source_info = {
                         'url': url,
@@ -871,6 +926,7 @@ class DocumentService:
                         document_name = url[:200] + '...'
                     else:
                         document_name = url
+                    # 创建新文档
                     document = DocumentService.build_document(
                         dataset, dataset_process_rule.id,
                         document_data["data_source"]["type"],
@@ -883,10 +939,12 @@ class DocumentService:
                     db.session.flush()
                     document_ids.append(document.id)
                     documents.append(document)
+
                     position += 1
+            # 提交数据库会话，确保所有更改被持久化
             db.session.commit()
 
-            # trigger async task
+            #  # 触发异步任务，对新创建或更新的文档进行索引
             if document_ids:
                 document_indexing_task.delay(dataset.id, document_ids)
             if duplicate_document_ids:
@@ -1047,8 +1105,10 @@ class DocumentService:
 
     @staticmethod
     def save_document_without_dataset_id(tenant_id: str, document_data: dict, account: Account):
+        # 获取租户的特性配置
         features = FeatureService.get_features(current_user.current_tenant_id)
 
+        # 如果账单功能已启用，则检查文档上传限制
         if features.billing.enabled:
             count = 0
             if document_data["data_source"]["type"] == "upload_file":
@@ -1061,26 +1121,31 @@ class DocumentService:
             elif document_data["data_source"]["type"] == "website_crawl":
                 website_info = document_data["data_source"]['info_list']['website_info_list']
                 count = len(website_info['urls'])
+            # 检查是否超过批量上传限制
             batch_upload_limit = int(dify_config.BATCH_UPLOAD_LIMIT)
             if count > batch_upload_limit:
                 raise ValueError(f"You have reached the batch upload limit of {batch_upload_limit}.")
 
+            # 检查文档上传配额
             DocumentService.check_documents_upload_quota(count, features)
-
+        # 初始化嵌入模型和数据集绑定信息
         embedding_model = None
         dataset_collection_binding_id = None
         retrieval_model = None
+        # 如果索引技术要求高质量，则获取默认的嵌入模型实例
         if document_data['indexing_technique'] == 'high_quality':
             model_manager = ModelManager()
             embedding_model = model_manager.get_default_model_instance(
                 tenant_id=current_user.current_tenant_id,
                 model_type=ModelType.TEXT_EMBEDDING
             )
+            # 获取与嵌入模型关联的数据集集合绑定
             dataset_collection_binding = DatasetCollectionBindingService.get_dataset_collection_binding(
                 embedding_model.provider,
                 embedding_model.model
             )
             dataset_collection_binding_id = dataset_collection_binding.id
+            # 设置检索模型，优先使用文档数据中的模型，否则使用默认模型
             if document_data.get('retrieval_model'):
                 retrieval_model = document_data['retrieval_model']
             else:
@@ -1095,7 +1160,7 @@ class DocumentService:
                     'score_threshold_enabled': False
                 }
                 retrieval_model = default_retrieval_model
-        # save dataset
+        #  # 创建数据集实例
         dataset = Dataset(
             tenant_id=tenant_id,
             name='',
@@ -1107,18 +1172,22 @@ class DocumentService:
             collection_binding_id=dataset_collection_binding_id,
             retrieval_model=retrieval_model
         )
-
+        # 将数据集添加到数据库会话并刷新以获取ID
         db.session.add(dataset)
         db.session.flush()
 
+        # 保存文档并获取文档列表、批次信息
         documents, batch = DocumentService.save_document_with_dataset_id(dataset, document_data, account)
-
+        # 截断文档名称以适应显示
         cut_length = 18
         cut_name = documents[0].name[:cut_length]
         dataset.name = cut_name + '...'
+
+        # 更新数据集描述
         dataset.description = 'useful for when you want to answer queries about the ' + documents[0].name
         db.session.commit()
 
+        # 返回数据集、文档列表和批次信息
         return dataset, documents, batch
 
     @classmethod

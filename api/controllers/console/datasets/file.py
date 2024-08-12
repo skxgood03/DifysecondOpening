@@ -44,19 +44,19 @@ class FileApi(Resource):
     def post(self):
 
         # get file from request
-        file = request.files['file']
+        file = request.files['file']  # 获取文件
 
         # check file
         if 'file' not in request.files:
             raise NoFileUploadedError()
 
-        if len(request.files) > 1:
+        if len(request.files) > 1:  # 文件数量限制
             raise TooManyFilesError()
         try:
-            upload_file = FileService.upload_file(file, current_user)
-        except services.errors.file.FileTooLargeError as file_too_large_error:
+            upload_file = FileService.upload_file(file, current_user)  # 上传
+        except services.errors.file.FileTooLargeError as file_too_large_error: #文件过大
             raise FileTooLargeError(file_too_large_error.description)
-        except services.errors.file.UnsupportedFileTypeError:
+        except services.errors.file.UnsupportedFileTypeError: #不支持的文件类型
             raise UnsupportedFileTypeError()
 
         return upload_file, 201
