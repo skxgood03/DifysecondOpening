@@ -180,11 +180,9 @@ class WeightRerankRunner:
             if 'score' in document.metadata:
                 query_vector_scores.append(document.metadata['score'])
             else:
-                # 获取文档的嵌入向量
-                content_vector = document.metadata['vector']
-                # 将查询向量和文档向量转换为NumPy数组
+                # transform to NumPy
                 vec1 = np.array(query_vector)
-                vec2 = np.array(document.metadata['vector'])
+                vec2 = np.array(document.vector)
 
                 # 计算点积
                 dot_product = np.dot(vec1, vec2)

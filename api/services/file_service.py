@@ -17,18 +17,33 @@ from models.account import Account
 from models.model import EndUser, UploadFile
 from services.errors.file import FileTooLargeError, UnsupportedFileTypeError
 
-IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg']
+IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "svg"]
 IMAGE_EXTENSIONS.extend([ext.upper() for ext in IMAGE_EXTENSIONS])
 
-ALLOWED_EXTENSIONS = ['txt', 'markdown', 'md', 'pdf', 'html', 'htm', 'xlsx', 'xls', 'docx', 'csv']
-UNSTRUCTURED_ALLOWED_EXTENSIONS = ['txt', 'markdown', 'md', 'pdf', 'html', 'htm', 'xlsx', 'xls',
-                                   'docx', 'csv', 'eml', 'msg', 'pptx', 'ppt', 'xml', 'epub']
+ALLOWED_EXTENSIONS = ["txt", "markdown", "md", "pdf", "html", "htm", "xlsx", "xls", "docx", "csv"]
+UNSTRUCTURED_ALLOWED_EXTENSIONS = [
+    "txt",
+    "markdown",
+    "md",
+    "pdf",
+    "html",
+    "htm",
+    "xlsx",
+    "xls",
+    "docx",
+    "csv",
+    "eml",
+    "msg",
+    "pptx",
+    "ppt",
+    "xml",
+    "epub",
+]
 
 PREVIEW_WORDS_LIMIT = 3000
 
 
 class FileService:
-
     @staticmethod
     def upload_file(file: FileStorage, user: Union[Account, EndUser], only_image: bool = False) -> UploadFile:
         # 获取文件名和扩展名
@@ -39,8 +54,11 @@ class FileService:
             filename = filename.split('.')[0][:200] + '.' + extension
         # 根据配置获取允许的文件类型
         etl_type = dify_config.ETL_TYPE
-        allowed_extensions = UNSTRUCTURED_ALLOWED_EXTENSIONS + IMAGE_EXTENSIONS if etl_type == 'Unstructured' \
+        allowed_extensions = (
+            UNSTRUCTURED_ALLOWED_EXTENSIONS + IMAGE_EXTENSIONS
+            if etl_type == "Unstructured"
             else ALLOWED_EXTENSIONS + IMAGE_EXTENSIONS
+        )
         # 检查文件类型是否在允许的范围内
         if extension.lower() not in allowed_extensions:
             raise UnsupportedFileTypeError()
@@ -59,7 +77,7 @@ class FileService:
             file_size_limit = dify_config.UPLOAD_FILE_SIZE_LIMIT * 1024 * 1024
         # 检查文件大小是否超过限制
         if file_size > file_size_limit:
-            message = f'File size exceeded. {file_size} > {file_size_limit}'
+            message = f"File size exceeded. {file_size} > {file_size_limit}"
             raise FileTooLargeError(message)
 
         # 生成文件的唯一UUID
@@ -71,7 +89,7 @@ class FileService:
             # end_user
             current_tenant_id = user.tenant_id
         # 构建文件在存储系统中的路径
-        file_key = 'upload_files/' + current_tenant_id + '/' + file_uuid + '.' + extension
+        file_key = "upload_files/" + current_tenant_id + "/" + file_uuid + "." + extension
 
         #  # 保存文件到存储系统
         storage.save(file_key, file_content)
@@ -85,11 +103,11 @@ class FileService:
             size=file_size,
             extension=extension,
             mime_type=file.mimetype,
-            created_by_role=('account' if isinstance(user, Account) else 'end_user'),
+            created_by_role=("account" if isinstance(user, Account) else "end_user"),
             created_by=user.id,
             created_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
             used=False,
-            hash=hashlib.sha3_256(file_content).hexdigest()
+            hash=hashlib.sha3_256(file_content).hexdigest(),
         )
 
         db.session.add(upload_file)
@@ -103,10 +121,10 @@ class FileService:
             text_name = text_name[:200]
         # user uuid as file name
         file_uuid = str(uuid.uuid4())
-        file_key = 'upload_files/' + current_user.current_tenant_id + '/' + file_uuid + '.txt'
+        file_key = "upload_files/" + current_user.current_tenant_id + "/" + file_uuid + ".txt"
 
         # save file to storage
-        storage.save(file_key, text.encode('utf-8'))
+        storage.save(file_key, text.encode("utf-8"))
 
         # save file to db
         upload_file = UploadFile(
@@ -115,13 +133,13 @@ class FileService:
             key=file_key,
             name=text_name,
             size=len(text),
-            extension='txt',
-            mime_type='text/plain',
+            extension="txt",
+            mime_type="text/plain",
             created_by=current_user.id,
             created_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
             used=True,
             used_by=current_user.id,
-            used_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+            used_at=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
         )
 
         db.session.add(upload_file)
@@ -131,9 +149,7 @@ class FileService:
 
     @staticmethod
     def get_file_preview(file_id: str) -> str:
-        upload_file = db.session.query(UploadFile) \
-            .filter(UploadFile.id == file_id) \
-            .first()
+        upload_file = db.session.query(UploadFile).filter(UploadFile.id == file_id).first()
 
         if not upload_file:
             raise NotFound("File not found")
@@ -141,12 +157,12 @@ class FileService:
         # extract text from file
         extension = upload_file.extension
         etl_type = dify_config.ETL_TYPE
-        allowed_extensions = UNSTRUCTURED_ALLOWED_EXTENSIONS if etl_type == 'Unstructured' else ALLOWED_EXTENSIONS
+        allowed_extensions = UNSTRUCTURED_ALLOWED_EXTENSIONS if etl_type == "Unstructured" else ALLOWED_EXTENSIONS
         if extension.lower() not in allowed_extensions:
             raise UnsupportedFileTypeError()
 
         text = ExtractProcessor.load_from_upload_file(upload_file, return_text=True)
-        text = text[0:PREVIEW_WORDS_LIMIT] if text else ''
+        text = text[0:PREVIEW_WORDS_LIMIT] if text else ""
 
         return text
 
@@ -156,9 +172,7 @@ class FileService:
         if not result:
             raise NotFound("File not found or signature is invalid")
 
-        upload_file = db.session.query(UploadFile) \
-            .filter(UploadFile.id == file_id) \
-            .first()
+        upload_file = db.session.query(UploadFile).filter(UploadFile.id == file_id).first()
 
         if not upload_file:
             raise NotFound("File not found or signature is invalid")
@@ -174,9 +188,7 @@ class FileService:
 
     @staticmethod
     def get_public_image_preview(file_id: str) -> tuple[Generator, str]:
-        upload_file = db.session.query(UploadFile) \
-            .filter(UploadFile.id == file_id) \
-            .first()
+        upload_file = db.session.query(UploadFile).filter(UploadFile.id == file_id).first()
 
         if not upload_file:
             raise NotFound("File not found or signature is invalid")

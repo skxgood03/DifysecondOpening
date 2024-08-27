@@ -468,7 +468,8 @@ class IndexingRunner:
 
         return text_docs
 
-    def filter_string(self, text):
+    @staticmethod
+    def filter_string(text):
         text = re.sub(r'<\|', '<', text)
         text = re.sub(r'\|>', '>', text)
         text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\xEF\xBF\xBE]', '', text)
@@ -476,7 +477,8 @@ class IndexingRunner:
         text = re.sub('\uFFFE', '', text)
         return text
 
-    def _get_splitter(self, processing_rule: DatasetProcessRule,
+    @staticmethod
+    def _get_splitter(processing_rule: DatasetProcessRule,
                       embedding_model_instance: Optional[ModelInstance]) -> TextSplitter:
         """
         Get the NodeParser object according to the processing rule.
@@ -669,7 +671,8 @@ class IndexingRunner:
 
         return all_documents
 
-    def _document_clean(self, text: str, processing_rule: DatasetProcessRule) -> str:
+    @staticmethod
+    def _document_clean(text: str, processing_rule: DatasetProcessRule) -> str:
         """
         Clean the document text according to the processing rules.
         """
@@ -698,7 +701,8 @@ class IndexingRunner:
 
         return text
 
-    def format_split_text(self, text):
+    @staticmethod
+    def format_split_text(text):
         regex = r"Q\d+:\s*(.*?)\s*A\d+:\s*([\s\S]*?)(?=Q\d+:|$)"
         matches = re.findall(regex, text, re.UNICODE)
 
@@ -771,18 +775,18 @@ class IndexingRunner:
         # create_meilisearch_thread.join()
         # 更新文档状态至已完成
         self._update_document_index_status(
-            document_id=dataset_document.id,  # 文档ID
-            after_indexing_status="completed",  # 更新后的状态
-            extra_update_params={  # 额外更新参数
-                DatasetDocument.tokens: tokens,  # 处理的token总数
-                DatasetDocument.completed_at: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),  # 完成时间
-                DatasetDocument.indexing_latency: indexing_end_at - indexing_start_at,  # 索引延迟时间
+            document_id=dataset_document.id,
+            after_indexing_status="completed",
+            extra_update_params={
+                DatasetDocument.tokens: tokens,
+                DatasetDocument.completed_at: datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None),
+                DatasetDocument.indexing_latency: indexing_end_at - indexing_start_at,
+                DatasetDocument.error: None,
             }
         )
 
-    def _process_keyword_index(self, flask_app, dataset_id, document_id, documents):
-
-        # 使用with语句确保在Flask应用上下文中执行以下操作
+    @staticmethod
+    def _process_keyword_index(flask_app, dataset_id, document_id, documents):
         with flask_app.app_context():
             # 查询数据集中指定ID的数据集
             dataset = Dataset.query.filter_by(id=dataset_id).first()
@@ -798,9 +802,10 @@ class IndexingRunner:
                 document_ids = [document.metadata['doc_id'] for document in documents]
                 # 更新数据库中满足条件的文档片段状态
                 db.session.query(DocumentSegment).filter(
-                    DocumentSegment.document_id == document_id,  # 文档片段所属的文档ID
-                    DocumentSegment.index_node_id.in_(document_ids),  # 文档片段的索引节点ID在文档ID列表中
-                    DocumentSegment.status == "indexing"  # 当前状态为索引中
+                    DocumentSegment.document_id == document_id,
+                    DocumentSegment.dataset_id == dataset_id,
+                    DocumentSegment.index_node_id.in_(document_ids),
+                    DocumentSegment.status == "indexing"
                 ).update({
                     DocumentSegment.status: "completed",  # 更新状态为已完成
                     DocumentSegment.enabled: True,  # 启用文档片段
@@ -895,6 +900,7 @@ class IndexingRunner:
             # 更新数据库中对应文档段的状态，设置为已完成，启用，并记录完成时间
             db.session.query(DocumentSegment).filter(
                 DocumentSegment.document_id == dataset_document.id,
+                DocumentSegment.dataset_id == dataset.id,
                 DocumentSegment.index_node_id.in_(document_ids),
                 DocumentSegment.status == "indexing"
             ).update({
@@ -907,13 +913,15 @@ class IndexingRunner:
             # 返回处理的总token数
             return tokens
 
-    def _check_document_paused_status(self, document_id: str):
+    @staticmethod
+    def _check_document_paused_status(document_id: str):
         indexing_cache_key = 'document_{}_is_paused'.format(document_id)
         result = redis_client.get(indexing_cache_key)
         if result:
             raise DocumentIsPausedException()
 
-    def _update_document_index_status(self, document_id: str, after_indexing_status: str,
+    @staticmethod
+    def _update_document_index_status(document_id: str, after_indexing_status: str,
                                       extra_update_params: Optional[dict] = None) -> None:
         """
         Update the document indexing status.
@@ -935,14 +943,16 @@ class IndexingRunner:
         DatasetDocument.query.filter_by(id=document_id).update(update_params)
         db.session.commit()
 
-    def _update_segments_by_document(self, dataset_document_id: str, update_params: dict) -> None:
+    @staticmethod
+    def _update_segments_by_document(dataset_document_id: str, update_params: dict) -> None:
         """
         Update the document segment by document id.
         """
         DocumentSegment.query.filter_by(document_id=dataset_document_id).update(update_params)
         db.session.commit()
 
-    def batch_add_segments(self, segments: list[DocumentSegment], dataset: Dataset):
+    @staticmethod
+    def batch_add_segments(segments: list[DocumentSegment], dataset: Dataset):
         """
         Batch add segments index processing
         """

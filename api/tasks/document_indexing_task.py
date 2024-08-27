@@ -46,17 +46,18 @@ def document_indexing_task(dataset_id: str, document_ids: list):
 
             # 检查是否超过订阅限制
             if 0 < vector_space.limit <= vector_space.size:
-                raise ValueError("Your total number of documents plus the number of uploads have over the limit of "
-                                 "your subscription.")
+                raise ValueError(
+                    "Your total number of documents plus the number of uploads have over the limit of "
+                    "your subscription."
+                )
     except Exception as e:
         # 如果有异常，更新所有相关文档的状态为错误，并记录异常信息
         for document_id in document_ids:
-            document = db.session.query(Document).filter(
-                Document.id == document_id,
-                Document.dataset_id == dataset_id
-            ).first()
+            document = (
+                db.session.query(Document).filter(Document.id == document_id, Document.dataset_id == dataset_id).first()
+            )
             if document:
-                document.indexing_status = 'error'
+                document.indexing_status = "error"
                 document.error = str(e)
                 document.stopped_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
                 db.session.add(document)
@@ -64,15 +65,14 @@ def document_indexing_task(dataset_id: str, document_ids: list):
         return
     # 更新文档状态为解析中，并添加到处理列表
     for document_id in document_ids:
-        logging.info(click.style('Start process document: {}'.format(document_id), fg='green'))
+        logging.info(click.style("Start process document: {}".format(document_id), fg="green"))
 
-        document = db.session.query(Document).filter(
-            Document.id == document_id,
-            Document.dataset_id == dataset_id
-        ).first()
+        document = (
+            db.session.query(Document).filter(Document.id == document_id, Document.dataset_id == dataset_id).first()
+        )
 
         if document:
-            document.indexing_status = 'parsing'
+            document.indexing_status = "parsing"
             document.processing_started_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             documents.append(document)
             db.session.add(document)
@@ -83,7 +83,7 @@ def document_indexing_task(dataset_id: str, document_ids: list):
         indexing_runner = IndexingRunner()
         indexing_runner.run(documents)
         end_at = time.perf_counter()
-        logging.info(click.style('Processed dataset: {} latency: {}'.format(dataset_id, end_at - start_at), fg='green'))
+        logging.info(click.style("Processed dataset: {} latency: {}".format(dataset_id, end_at - start_at), fg="green"))
     except DocumentIsPausedException as ex:
         # 如果文档被暂停，记录信息
         logging.info(click.style(str(ex), fg='yellow'))

@@ -5,6 +5,10 @@ WORKDIR /app/api
 
 # Install Poetry
 ENV POETRY_VERSION=1.8.3
+
+# if you located in China, you can use aliyun mirror to speed up
+# RUN pip install --no-cache-dir poetry==${POETRY_VERSION} -i https://mirrors.aliyun.com/pypi/simple/
+
 RUN pip install --no-cache-dir poetry==${POETRY_VERSION}
 
 # Configure Poetry
@@ -12,8 +16,12 @@ ENV POETRY_CACHE_DIR=/tmp/poetry_cache
 ENV POETRY_NO_INTERACTION=1
 ENV POETRY_VIRTUALENVS_IN_PROJECT=true
 ENV POETRY_VIRTUALENVS_CREATE=true
+ENV POETRY_REQUESTS_TIMEOUT=15
 
 FROM base AS packages
+
+# if you located in China, you can use aliyun mirror to speed up
+# RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debian.sources
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc g++ libc-dev libffi-dev libgmp-dev libmpfr-dev libmpc-dev
@@ -42,6 +50,8 @@ WORKDIR /app/api
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl nodejs libgmp-dev libmpfr-dev libmpc-dev \
+    # if you located in China, you can use aliyun mirror to speed up
+    # && echo "deb http://mirrors.aliyun.com/debian testing main" > /etc/apt/sources.list \
     && echo "deb http://deb.debian.org/debian testing main" > /etc/apt/sources.list \
     && apt-get update \
     # For Security
@@ -53,6 +63,9 @@ RUN apt-get update \
 ENV VIRTUAL_ENV=/app/api/.venv
 COPY --from=packages ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+# Download nltk data
+RUN python -c "import nltk; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
 
 # Copy source code
 COPY . /app/api/
