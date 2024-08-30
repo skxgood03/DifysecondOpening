@@ -118,11 +118,12 @@ class DatasetListApi(Resource):
             raise Forbidden()
 
         try:
-            dataset = DatasetService.create_empty_dataset(  # 创建空白知识库
-                tenant_id=current_user.current_tenant_id,  # 租户ID
-                name=args['name'],  # 名称
-                indexing_technique=args['indexing_technique'],  # 索引技术
-                account=current_user  # 用户
+            dataset = DatasetService.create_empty_dataset(
+                tenant_id=current_user.current_tenant_id,
+                name=args["name"],
+                indexing_technique=args["indexing_technique"],
+                account=current_user,
+                permission=DatasetPermissionEnum.ONLY_ME,
             )
         except services.errors.dataset.DatasetNameDuplicateError:
             raise DatasetNameDuplicateError()

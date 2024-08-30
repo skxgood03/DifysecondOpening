@@ -607,6 +607,7 @@ class DocumentDetailApi(DocumentResource):
                 "hit_count": document.hit_count,
                 "display_status": document.display_status,
                 "doc_form": document.doc_form,
+                "doc_language": document.doc_language,
             }
         else:
             process_rules = DatasetService.get_process_rules(dataset_id)
@@ -639,6 +640,7 @@ class DocumentDetailApi(DocumentResource):
                 "hit_count": document.hit_count,
                 "display_status": document.display_status,
                 "doc_form": document.doc_form,
+                "doc_language": document.doc_language,
             }
 
         return response, 200
