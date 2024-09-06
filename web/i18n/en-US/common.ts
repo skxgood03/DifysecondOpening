@@ -37,6 +37,7 @@ const translation = {
     params: 'Params',
     duplicate: 'Duplicate',
     rename: 'Rename',
+    audioSourceUnavailable: 'AudioSource is unavailable',
   },
   errorMsg: {
     fieldRequired: '{{field}} is required',
@@ -132,7 +133,8 @@ const translation = {
     workspace: 'Workspace',
     createWorkspace: 'Create Workspace',
     helpCenter: 'Help',
-    roadmapAndFeedback: 'Feedback',
+    communityFeedback: 'Feedback',
+    roadmap: 'Roadmap',
     community: 'Community',
     about: 'About',
     logout: 'Log out',

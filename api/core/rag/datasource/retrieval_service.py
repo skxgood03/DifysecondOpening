@@ -174,8 +174,7 @@ class RetrievalService:
                 )
                 # 如果有搜索结果
                 if documents:
-                    # 如果启用了重排序模型且检索方法为语义搜索，则进行结果重排序
-                    if reranking_model and retrival_method == RetrievalMethod.SEMANTIC_SEARCH.value:
+                    if reranking_model and reranking_model.get('reranking_model_name') and reranking_model.get('reranking_provider_name') and retrival_method == RetrievalMethod.SEMANTIC_SEARCH.value:
                         data_post_processor = DataPostProcessor(str(dataset.tenant_id),
                                                                 RerankMode.RERANKING_MODEL.value,
                                                                 reranking_model, None, False)
@@ -212,7 +211,7 @@ class RetrievalService:
                     top_k=top_k
                 )
                 if documents:
-                    if reranking_model and retrival_method == RetrievalMethod.FULL_TEXT_SEARCH.value:
+                    if reranking_model and reranking_model.get('reranking_model_name') and reranking_model.get('reranking_provider_name') and retrival_method == RetrievalMethod.FULL_TEXT_SEARCH.value:
                         data_post_processor = DataPostProcessor(str(dataset.tenant_id),
                                                                 RerankMode.RERANKING_MODEL.value,
                                                                 reranking_model, None, False)

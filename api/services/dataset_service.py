@@ -1113,8 +1113,7 @@ class DocumentService:
 
             # 检查文档上传配额
             DocumentService.check_documents_upload_quota(count, features)
-        # 初始化嵌入模型和数据集绑定信息
-        embedding_model = None
+
         dataset_collection_binding_id = None
         retrieval_model = None
         # 如果索引技术要求高质量，则获取默认的嵌入模型实例
@@ -1145,10 +1144,10 @@ class DocumentService:
             tenant_id=tenant_id,
             name="",
             data_source_type=document_data["data_source"]["type"],
-            indexing_technique=document_data["indexing_technique"],
+            indexing_technique=document_data.get("indexing_technique", "high_quality"),
             created_by=account.id,
-            embedding_model=embedding_model.model if embedding_model else None,
-            embedding_model_provider=embedding_model.provider if embedding_model else None,
+            embedding_model=document_data.get("embedding_model"),
+            embedding_model_provider=document_data.get("embedding_model_provider"),
             collection_binding_id=dataset_collection_binding_id,
             retrieval_model=retrieval_model,
         )

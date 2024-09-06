@@ -30,15 +30,14 @@ def _split_text_with_regex(
         if keep_separator:
             # The parentheses in the pattern keep the delimiters in the result.
             _splits = re.split(f"({re.escape(separator)})", text)
-            splits = [_splits[i] + _splits[i + 1] for i in range(1, len(_splits), 2)]
-            if len(_splits) % 2 == 0:
+            splits = [_splits[i - 1] + _splits[i] for i in range(1, len(_splits), 2)]
+            if len(_splits) % 2 != 0:
                 splits += _splits[-1:]
-            splits = [_splits[0]] + splits
         else:
             splits = re.split(separator, text)
     else:
         splits = list(text)
-    return [s for s in splits if s != ""]
+    return [s for s in splits if (s != "" and s != '\n')]
 
 
 class TextSplitter(BaseDocumentTransformer, ABC):
@@ -109,7 +108,7 @@ class TextSplitter(BaseDocumentTransformer, ABC):
         else:
             return text
 
-    def _merge_splits(self, splits: Iterable[str], separator: str) -> list[str]:
+    def _merge_splits(self, splits: Iterable[str], separator: str, lengths: list[int]) -> list[str]:
         # We now want to combine these smaller pieces into medium size
         # chunks to send to the LLM.
         #通过 Tokenizer 来计算字符串占用的 token 个数
@@ -118,8 +117,9 @@ class TextSplitter(BaseDocumentTransformer, ABC):
         docs = []
         current_doc: list[str] = []
         total = 0
+        index = 0
         for d in splits:
-            _len = self._length_function(d)
+            _len = lengths[index]
             if (
                     total + _len + (separator_len if len(current_doc) > 0 else 0)
                     > self._chunk_size
@@ -147,6 +147,7 @@ class TextSplitter(BaseDocumentTransformer, ABC):
                         current_doc = current_doc[1:]
             current_doc.append(d)
             total += _len + (separator_len if len(current_doc) > 1 else 0)
+            index += 1
         doc = self._join_docs(current_doc, separator)
         if doc is not None:
             docs.append(doc)
@@ -243,7 +244,10 @@ class CharacterTextSplitter(TextSplitter):
         # First we naively split the large input into a bunch of smaller ones.
         splits = _split_text_with_regex(text, self._separator, self._keep_separator)
         _separator = "" if self._keep_separator else self._separator
-        return self._merge_splits(splits, _separator)
+        _good_splits_lengths = []  # cache the lengths of the splits
+        for split in splits:
+            _good_splits_lengths.append(self._length_function(split))
+        return self._merge_splits(splits, _separator, _good_splits_lengths)
 
 
 class LineType(TypedDict):
@@ -509,11 +513,10 @@ class RecursiveCharacterTextSplitter(TextSplitter):
         在每次处理完一个长文本块后，将之前累积的短文本块合并，并添加到最终的文本块列表中。
         最终返回分割后的所有文本块组成的列表。
         """
-        """Split incoming text and return chunks."""
-        final_chunks = []  # 初始化最终的文本块列表
-        # 从separators中选取一个有效的分隔符
-        separator = separators[-1]  # 默认使用最后一个分隔符
-        new_separators = []  # 初始化新的分隔符列表
+        final_chunks = []
+        separator = separators[-1]
+        new_separators = []
+
         for i, _s in enumerate(separators):
             if _s == "":  # 初始化新的分隔符列表
                 separator = _s
@@ -524,28 +527,32 @@ class RecursiveCharacterTextSplitter(TextSplitter):
                 break
         # 使用选定的分隔符分割文本
         splits = _split_text_with_regex(text, separator, self._keep_separator)
-        # # 合并短文本块，递归分割长文本块
-        _good_splits = [] # 初始化合适的短文本块列表
-        _separator = "" if self._keep_separator else separator # 确定是否保留分隔符
+        _good_splits = []
+        _good_splits_lengths = []  # cache the lengths of the splits
+        _separator = "" if self._keep_separator else separator
+
         for s in splits:
-            if self._length_function(s) < self._chunk_size:  # 如果文本块长度小于设定的块大小
-                _good_splits.append(s) # 将其添加到合适的短文本块列表
+            s_len = self._length_function(s)
+            if s_len < self._chunk_size:
+                _good_splits.append(s)
+                _good_splits_lengths.append(s_len)
             else:
-                if _good_splits:  # 如果有合适的短文本块
-                    merged_text = self._merge_splits(_good_splits, _separator) # 合并它们
-                    final_chunks.extend(merged_text)  # 将合并后的文本块添加到最终的文本块列表
-                    _good_splits = [] # 清空短文本块列表
-                # 如果没有新的分隔符，直接将当前过长的文本块添加到最终列表
+                if _good_splits:
+                    merged_text = self._merge_splits(_good_splits, _separator, _good_splits_lengths)
+                    final_chunks.extend(merged_text)
+                    _good_splits = []
+                    _good_splits_lengths = []
                 if not new_separators:
                     final_chunks.append(s)
                 else:
                     # 如果有新的分隔符，递归地分割当前过长的文本块
                     other_info = self._split_text(s, new_separators)
-                    final_chunks.extend(other_info) # 将递归分割的结果添加到最终列表
-        # 最后处理剩余的合适短文本块
+                    final_chunks.extend(other_info)
+
         if _good_splits:
-            merged_text = self._merge_splits(_good_splits, _separator)
+            merged_text = self._merge_splits(_good_splits, _separator, _good_splits_lengths)
             final_chunks.extend(merged_text)
+
         return final_chunks
 
     def split_text(self, text: str) -> list[str]:
