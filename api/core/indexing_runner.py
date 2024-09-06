@@ -7,10 +7,9 @@ import threading
 import time
 import uuid
 from typing import Optional, cast
-import meilisearch
+
 from flask import Flask, current_app
 from flask_login import current_user
-from meilisearch.models.task import Task
 from sqlalchemy.orm.exc import ObjectDeletedError
 
 from configs import dify_config
@@ -37,7 +36,6 @@ from models.dataset import Dataset, DatasetProcessRule, DocumentSegment
 from models.dataset import Document as DatasetDocument
 from models.model import UploadFile
 from services.feature_service import FeatureService
-from tqdm import tqdm
 
 
 class IndexingRunner:

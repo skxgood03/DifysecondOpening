@@ -28,6 +28,7 @@ class AppListApi(Resource):
     def get(self):
         """Get app list"""
 
+
         def uuid_list(value):
             try:
                 return [str(uuid.UUID(v)) for v in value.split(",")]
@@ -49,6 +50,7 @@ class AppListApi(Resource):
         parser.add_argument("tag_ids", type=uuid_list, location="args", required=False)
 
         args = parser.parse_args()
+
 
         # get app list
         app_service = AppService()
@@ -82,6 +84,7 @@ class AppListApi(Resource):
             raise BadRequest("mode is required")
 
         app_service = AppService()
+        # current_user.current_tenant_id 租户 args主要信息 用户current_user
         app = app_service.create_app(current_user.current_tenant_id, args, current_user)
 
         return app, 201
@@ -149,6 +152,7 @@ class AppApi(Resource):
     @get_app_model
     @marshal_with(app_detail_fields_with_site)
     def get(self, app_model):
+
         """Get app detail"""
         app_service = AppService()
 

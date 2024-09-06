@@ -61,25 +61,28 @@ class AppDslService:
     @classmethod
     def import_and_create_new_app(cls, tenant_id: str, data: str, args: dict, account: Account) -> App:
         """
-        Import app dsl and create new app
+       导入应用 DSL 并创建新的应用实例
         :param tenant_id: tenant id
-        :param data: import data
+        :param data: 应用描述语言数据 (YAML 格式)
         :param args: request args
         :param account: Account instance
         """
+        # 尝试将data字符串解析成Python字典结构
         try:
             import_data = yaml.safe_load(data)
         except yaml.YAMLError:
+            # 如果解析失败，则抛出错误提示YAML格式不正确
             raise ValueError("Invalid YAML format in data argument.")
 
-        # check or repair dsl version
+        # 检查或修正DSL版本，确保其符合当前系统要求
         import_data = cls._check_or_fix_dsl(import_data)
-
+        # 获取应用的基本信息部分
         app_data = import_data.get("app")
         if not app_data:
+            # 如果没有找到应用信息，则抛出错误
             raise ValueError("Missing app in data argument")
 
-        # get app basic info
+        # 从请求参数或导入的数据中获取应用名称，优先使用请求参数中的值
         name = args.get("name") if args.get("name") else app_data.get("name")
         description = args.get("description") if args.get("description") else app_data.get("description", "")
         icon_type = args.get("icon_type") if args.get("icon_type") else app_data.get("icon_type")
@@ -89,7 +92,7 @@ class AppDslService:
         )
         use_icon_as_answer_icon = app_data.get("use_icon_as_answer_icon", False)
 
-        # import dsl and create app
+        # 根据应用模式创建不同类型的应用
         app_mode = AppMode.value_of(app_data.get("mode"))
         if app_mode in [AppMode.ADVANCED_CHAT, AppMode.WORKFLOW]:
             app = cls._import_and_create_new_workflow_based_app(
@@ -104,6 +107,7 @@ class AppDslService:
                 icon_background=icon_background,
                 use_icon_as_answer_icon=use_icon_as_answer_icon,
             )
+        #如果是助手
         elif app_mode in [AppMode.CHAT, AppMode.AGENT_CHAT, AppMode.COMPLETION]:
             app = cls._import_and_create_new_model_config_based_app(
                 tenant_id=tenant_id,

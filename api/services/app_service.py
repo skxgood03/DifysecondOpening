@@ -70,34 +70,42 @@ class AppService:
         :param args: request args
         :param account: Account instance
         """
+        # 获取应用模式
         app_mode = AppMode.value_of(args["mode"])
+        # 根据应用模式获取默认的应用模板
         app_template = default_app_templates[app_mode]
 
-        # get model config
+        # 获取模型配置
         default_model_config = app_template.get("model_config")
+        # 如果存在默认模型配置，则复制一份以避免修改原始数据
         default_model_config = default_model_config.copy() if default_model_config else None
+        # 如果存在默认模型配置并且配置中包含 "model" 字段
         if default_model_config and "model" in default_model_config:
-            # get model provider
+            # 初始化模型管理器
             model_manager = ModelManager()
 
-            # get default model instance
+            # 尝试获取默认的模型实例
             try:
                 model_instance = model_manager.get_default_model_instance(
                     tenant_id=account.current_tenant_id, model_type=ModelType.LLM
                 )
             except (ProviderTokenNotInitError, LLMBadRequestError):
+                # 如果出现特定错误，则设置模型实例为 None
                 model_instance = None
             except Exception as e:
+                # 记录其他异常
                 logging.exception(e)
                 model_instance = None
-
+            # 如果找到了模型实例
             if model_instance:
+                # 检查模型实例是否与默认配置中的模型和提供商匹配
                 if (
-                    model_instance.model == default_model_config["model"]["name"]
-                    and model_instance.provider == default_model_config["model"]["provider"]
-                ):
+                        model_instance.model == default_model_config["model"]["name"]
+                        and model_instance.provider == default_model_config["model"]["provider"]
+                ):  # 如果匹配，则直接使用默认配置中的模型字典
                     default_model_dict = default_model_config["model"]
                 else:
+                    # 如果不匹配，根据模型实例创建新的模型字典
                     llm_model = cast(LargeLanguageModel, model_instance.model_type_instance)
                     model_schema = llm_model.get_model_schema(model_instance.model, model_instance.credentials)
 
@@ -108,15 +116,16 @@ class AppService:
                         "completion_params": {},
                     }
             else:
+                # 如果没有找到模型实例，则尝试获取默认的提供商和模型名称
                 provider, model = model_manager.get_default_provider_model_name(
                     tenant_id=account.current_tenant_id, model_type=ModelType.LLM
                 )
                 default_model_config["model"]["provider"] = provider
                 default_model_config["model"]["name"] = model
                 default_model_dict = default_model_config["model"]
-
+            # 将模型字典转换为 JSON 格式并存储在默认模型配置中
             default_model_config["model"] = json.dumps(default_model_dict)
-
+        # 创建应用实例
         app = App(**app_template["app"])
         app.name = args["name"]
         app.description = args.get("description", "")
@@ -131,20 +140,24 @@ class AppService:
         app.updated_by = account.id
 
         db.session.add(app)
+        # 提交事务以便获取应用 ID
         db.session.flush()
-
+        # 如果存在默认模型配置
         if default_model_config:
+            # 创建应用模型配置实例
             app_model_config = AppModelConfig(**default_model_config)
+            # 设置应用模型配置关联的应用 ID
             app_model_config.app_id = app.id
             app_model_config.created_by = account.id
             app_model_config.updated_by = account.id
             db.session.add(app_model_config)
+            # 提交事务以便获取应用模型配置 ID
             db.session.flush()
-
+            # 设置应用关联的应用模型配置 ID
             app.app_model_config_id = app_model_config.id
-
+        # 提交所有更改到数据库
         db.session.commit()
-
+        # 发送应用创建信号
         app_was_created.send(app, account=account)
 
         return app
@@ -153,22 +166,26 @@ class AppService:
         """
         Get App
         """
-        # get original app model config
+        # 获取原始的应用模型配置
         if app.mode == AppMode.AGENT_CHAT.value or app.is_agent:
             model_config: AppModelConfig = app.app_model_config
             agent_mode = model_config.agent_mode_dict
             # decrypt agent tool parameters if it's secret-input
+            # 遍历代理模式下的工具列表
             for tool in agent_mode.get("tools") or []:
+                # 如果工具不是字典类型或键的数量小于等于3，则跳过
                 if not isinstance(tool, dict) or len(tool.keys()) <= 3:
                     continue
+                # 将工具信息转换为 AgentToolEntity 对象
                 agent_tool_entity = AgentToolEntity(**tool)
-                # get tool
+                # 尝试获取工具运行时实例
                 try:
                     tool_runtime = ToolManager.get_agent_tool_runtime(
                         tenant_id=current_user.current_tenant_id,
                         app_id=app.id,
                         agent_tool=agent_tool_entity,
                     )
+                    # 创建工具参数配置管理器实例
                     manager = ToolParameterConfigurationManager(
                         tenant_id=current_user.current_tenant_id,
                         tool_runtime=tool_runtime,
@@ -177,35 +194,39 @@ class AppService:
                         identity_id=f"AGENT.{app.id}",
                     )
 
-                    # get decrypted parameters
+                    # 获取解密后的工具参数
                     if agent_tool_entity.tool_parameters:
                         parameters = manager.decrypt_tool_parameters(agent_tool_entity.tool_parameters or {})
                         masked_parameter = manager.mask_tool_parameters(parameters or {})
                     else:
                         masked_parameter = {}
 
-                    # override tool parameters
+                    # 替换工具参数
                     tool["tool_parameters"] = masked_parameter
-                except Exception as e:
+                except Exception as e:  # 如果出现异常，则忽略该工具
                     pass
 
-            # override agent mode
+            # 将解密后的代理模式转换为 JSON 格式并覆盖原有值
             model_config.agent_mode = json.dumps(agent_mode)
 
+            # 定义一个继承自 App 的新类，用于覆盖模型配置
             class ModifiedApp(App):
                 """
                 Modified App class
                 """
 
                 def __init__(self, app):
+                    # 更新新类的属性为原始 App 的属性
                     self.__dict__.update(app.__dict__)
 
                 @property
                 def app_model_config(self):
+                    # 返回修改后的模型配置
                     return model_config
 
+            # 创建 ModifiedApp 类的实例并返回
             app = ModifiedApp(app)
-
+        # 返回最终的应用实例
         return app
 
     def update_app(self, app: App, args: dict) -> App:

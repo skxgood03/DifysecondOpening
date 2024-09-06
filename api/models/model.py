@@ -55,6 +55,7 @@ class IconType(Enum):
     IMAGE = "image"
     EMOJI = "emoji"
 
+
 class App(db.Model):
     __tablename__ = 'apps'
     __table_args__ = (
@@ -340,8 +341,8 @@ class AppModelConfig(db.Model):
             else:
                 return dataset_configs
         return {
-                'retrieval_model': 'multiple',
-            }
+            'retrieval_model': 'multiple',
+        }
 
     @property
     def file_upload_dict(self) -> dict:
@@ -527,7 +528,8 @@ class Conversation(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
 
     messages = db.relationship("Message", backref="conversation", lazy='select', passive_deletes="all")
-    message_annotations = db.relationship("MessageAnnotation", backref="conversation", lazy='select', passive_deletes="all")
+    message_annotations = db.relationship("MessageAnnotation", backref="conversation", lazy='select',
+                                          passive_deletes="all")
 
     is_deleted = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
 
@@ -843,7 +845,8 @@ class Message(db.Model):
                     else:
                         extension = '.bin'
                     # add sign url
-                    url = ToolFileParser.get_tool_file_manager().sign_file(tool_file_id=tool_file_id, extension=extension)
+                    url = ToolFileParser.get_tool_file_manager().sign_file(tool_file_id=tool_file_id,
+                                                                           extension=extension)
 
             files.append({
                 'id': message_file.id,
@@ -1139,7 +1142,7 @@ class Site(db.Model):
     @property
     def app_base_url(self):
         return (
-            dify_config.APP_WEB_URL if  dify_config.APP_WEB_URL else request.url_root.rstrip('/'))
+            dify_config.APP_WEB_URL if dify_config.APP_WEB_URL else request.url_root.rstrip('/'))
 
 
 class ApiToken(db.Model):
@@ -1435,3 +1438,5 @@ class TraceAppConfig(db.Model):
             "created_at": self.created_at.__str__() if self.created_at else None,
             'updated_at': self.updated_at.__str__() if self.updated_at else None,
         }
+
+

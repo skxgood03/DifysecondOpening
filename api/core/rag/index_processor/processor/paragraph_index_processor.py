@@ -1,10 +1,13 @@
 """Paragraph index processor."""
-import json
 import time
 import uuid
 from typing import Optional
 
 import meilisearch
+import openai
+from meilisearch.models.task import Task
+from tqdm import tqdm
+
 from core.rag.cleaner.clean_processor import CleanProcessor
 from core.rag.datasource.keyword.keyword_factory import Keyword
 from core.rag.datasource.retrieval_service import RetrievalService
@@ -14,13 +17,7 @@ from core.rag.extractor.extract_processor import ExtractProcessor
 from core.rag.index_processor.index_processor_base import BaseIndexProcessor
 from core.rag.models.document import Document
 from libs import helper
-from meilisearch.models.task import Task
 from models.dataset import Dataset
-from tqdm import tqdm
-
-import openai
-
-from core.rag.datasource.vdb.meilisearchs.meili_vector import MeiliSearchHandler
 
 meili_client = meilisearch.Client("http://127.0.0.1:7700", "LD9I0_C10_Ee68J0HsztV3B_gO8eITzk2yNaruep_I")
 openai_client = openai.OpenAI(api_key="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",
