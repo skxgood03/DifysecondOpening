@@ -66,7 +66,7 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
                     # 更新文档节点元数据
                     document_node.metadata['doc_id'] = doc_id
                     document_node.metadata['doc_hash'] = hash
-                    # # 清除分割符
+                    # delete Splitter character
                     page_content = document_node.page_content
                     if page_content.startswith(".") or page_content.startswith("。"):
                         page_content = page_content[1:].strip()  # 去除开头的点或句号
@@ -190,10 +190,10 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
             else:
                 keyword.delete()
 
-    def retrieve(self, retrival_method: str, query: str, dataset: Dataset, top_k: int,
+    def retrieve(self, retrieval_method: str, query: str, dataset: Dataset, top_k: int,
                  score_threshold: float, reranking_model: dict) -> list[Document]:
         # Set search parameters.
-        results = RetrievalService.retrieve(retrival_method=retrival_method, dataset_id=dataset.id, query=query,
+        results = RetrievalService.retrieve(retrieval_method=retrieval_method, dataset_id=dataset.id, query=query,
                                             top_k=top_k, score_threshold=score_threshold,
                                             reranking_model=reranking_model)
         # Organize results.
