@@ -5,6 +5,13 @@ class CleanProcessor:
 
     @classmethod
     def clean(cls, text: str, process_rule: dict) -> str:
+        """
+           清理文本，移除无效符号和执行预处理规则。
+
+           :param text: 待清理的原始文本
+           :param process_rule: 处理规则字典，包含预处理规则
+           :return: 清理后的文本
+           """
         # default clean
         # remove invalid symbol
         text = re.sub(r'<\|', '<', text)

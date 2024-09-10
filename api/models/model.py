@@ -7,6 +7,7 @@ from typing import Optional
 from flask import request
 from flask_login import UserMixin
 from sqlalchemy import Float, func, text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from configs import dify_config
 from core.file.tool_file_parser import ToolFileParser
@@ -14,8 +15,8 @@ from core.file.upload_file_parser import UploadFileParser
 from extensions.ext_database import db
 from libs.helper import generate_string
 
-from . import StringUUID
 from .account import Account, Tenant
+from .types import StringUUID
 
 
 class DifySetup(db.Model):
@@ -50,6 +51,11 @@ class AppMode(Enum):
         raise ValueError(f'invalid mode value {value}')
 
 
+class IconType(Enum):
+    IMAGE = "image"
+    EMOJI = "emoji"
+
+
 class App(db.Model):
     __tablename__ = 'apps'
     __table_args__ = (
@@ -62,6 +68,7 @@ class App(db.Model):
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False, server_default=db.text("''::character varying"))
     mode = db.Column(db.String(255), nullable=False)
+    icon_type = db.Column(db.String(255), nullable=True)
     icon = db.Column(db.String(255))
     icon_background = db.Column(db.String(255))
     app_model_config_id = db.Column(StringUUID, nullable=True)
@@ -76,8 +83,11 @@ class App(db.Model):
     is_universal = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
     tracing = db.Column(db.Text, nullable=True)
     max_active_requests = db.Column(db.Integer, nullable=True)
+    created_by = db.Column(StringUUID, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
+    updated_by = db.Column(StringUUID, nullable=True)
     updated_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
+    use_icon_as_answer_icon = db.Column(db.Boolean, nullable=False, server_default=db.text("false"))
 
     @property
     def desc_or_prompt(self):
@@ -215,7 +225,9 @@ class AppModelConfig(db.Model):
     provider = db.Column(db.String(255), nullable=True)
     model_id = db.Column(db.String(255), nullable=True)
     configs = db.Column(db.JSON, nullable=True)
+    created_by = db.Column(StringUUID, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
+    updated_by = db.Column(StringUUID, nullable=True)
     updated_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
     opening_statement = db.Column(db.Text)
     suggested_questions = db.Column(db.Text)
@@ -329,8 +341,8 @@ class AppModelConfig(db.Model):
             else:
                 return dataset_configs
         return {
-                'retrieval_model': 'multiple',
-            }
+            'retrieval_model': 'multiple',
+        }
 
     @property
     def file_upload_dict(self) -> dict:
@@ -484,7 +496,6 @@ class InstalledApp(db.Model):
         return tenant
 
 
-
 class Conversation(db.Model):
     __tablename__ = 'conversations'
     __table_args__ = (
@@ -512,6 +523,7 @@ class Conversation(db.Model):
     from_account_id = db.Column(StringUUID)
     read_at = db.Column(db.DateTime)
     read_account_id = db.Column(StringUUID)
+    dialogue_count: Mapped[int] = mapped_column(default=0)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
     updated_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
 
@@ -614,6 +626,15 @@ class Conversation(db.Model):
             end_user = db.session.query(EndUser).filter(EndUser.id == self.from_end_user_id).first()
             if end_user:
                 return end_user.session_id
+
+        return None
+
+    @property
+    def from_account_name(self):
+        if self.from_account_id:
+            account = db.session.query(Account).filter(Account.id == self.from_account_id).first()
+            if account:
+                return account.name
 
         return None
 
@@ -824,7 +845,8 @@ class Message(db.Model):
                     else:
                         extension = '.bin'
                     # add sign url
-                    url = ToolFileParser.get_tool_file_manager().sign_file(tool_file_id=tool_file_id, extension=extension)
+                    url = ToolFileParser.get_tool_file_manager().sign_file(tool_file_id=tool_file_id,
+                                                                           extension=extension)
 
             files.append({
                 'id': message_file.id,
@@ -1086,6 +1108,7 @@ class Site(db.Model):
     id = db.Column(StringUUID, server_default=db.text('uuid_generate_v4()'))
     app_id = db.Column(StringUUID, nullable=False)
     title = db.Column(db.String(255), nullable=False)
+    icon_type = db.Column(db.String(255), nullable=True)
     icon = db.Column(db.String(255))
     icon_background = db.Column(db.String(255))
     description = db.Column(db.Text)
@@ -1095,12 +1118,15 @@ class Site(db.Model):
     copyright = db.Column(db.String(255))
     privacy_policy = db.Column(db.String(255))
     show_workflow_steps = db.Column(db.Boolean, nullable=False, server_default=db.text('true'))
+    use_icon_as_answer_icon = db.Column(db.Boolean, nullable=False, server_default=db.text("false"))
     custom_disclaimer = db.Column(db.String(255), nullable=True)
     customize_domain = db.Column(db.String(255))
     customize_token_strategy = db.Column(db.String(255), nullable=False)
     prompt_public = db.Column(db.Boolean, nullable=False, server_default=db.text('false'))
     status = db.Column(db.String(255), nullable=False, server_default=db.text("'normal'::character varying"))
+    created_by = db.Column(StringUUID, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
+    updated_by = db.Column(StringUUID, nullable=True)
     updated_at = db.Column(db.DateTime, nullable=False, server_default=db.text('CURRENT_TIMESTAMP(0)'))
     code = db.Column(db.String(255))
 
@@ -1116,7 +1142,7 @@ class Site(db.Model):
     @property
     def app_base_url(self):
         return (
-            dify_config.APP_WEB_URL if  dify_config.APP_WEB_URL else request.host_url.rstrip('/'))
+            dify_config.APP_WEB_URL if dify_config.APP_WEB_URL else request.url_root.rstrip('/'))
 
 
 class ApiToken(db.Model):
@@ -1315,9 +1341,7 @@ class MessageAgentThought(db.Model):
                 }
         except Exception as e:
             if self.observation:
-                return {
-                    tool: self.observation for tool in tools
-                }
+                return dict.fromkeys(tools, self.observation)
 
 
 class DatasetRetrieverResource(db.Model):
@@ -1414,3 +1438,5 @@ class TraceAppConfig(db.Model):
             "created_at": self.created_at.__str__() if self.created_at else None,
             'updated_at': self.updated_at.__str__() if self.updated_at else None,
         }
+
+

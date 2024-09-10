@@ -91,38 +91,66 @@ class WeaviateVector(BaseVector):
         self.add_texts(texts, embeddings)
 
     def _create_collection(self):
+        """
+        创建向量索引集合，如果集合已存在则跳过创建。
+
+        :return: 无
+        """
+
+        # 生成锁的名称，用于防止并发创建集合
         lock_name = 'vector_indexing_lock_{}'.format(self._collection_name)
+        # 使用Redis锁防止并发创建集合
         with redis_client.lock(lock_name, timeout=20):
+            # 检查集合是否存在缓存标志
             collection_exist_cache_key = 'vector_indexing_{}'.format(self._collection_name)
             if redis_client.get(collection_exist_cache_key):
+                # 如果存在，则集合已被创建，直接返回
                 return
+            # 定义集合的模式
             schema = self._default_schema(self._collection_name)
+            # 如果集合模式不存在于客户端，则创建集合
             if not self._client.schema.contains(schema):
                 # create collection
                 self._client.schema.create_class(schema)
+                # 设置集合存在标志，有效期为1小时
             redis_client.set(collection_exist_cache_key, 1, ex=3600)
 
     def add_texts(self, documents: list[Document], embeddings: list[list[float]], **kwargs):
+        """
+           将带有嵌入向量的文档添加到向量索引集合中。
+
+           :param documents: 文档列表，每个文档包含页面内容和其他元数据
+           :param embeddings: 与文档相对应的嵌入向量列表
+           :param kwargs: 其他可选参数
+           :return: 文档的UUID列表
+           """
+        # 获取文档的UUID列表
         uuids = self._get_uuids(documents)
+        # 提取文档的页面内容
         texts = [d.page_content for d in documents]
+        # 提取文档的元数据
         metadatas = [d.metadata for d in documents]
-
+        # 初始化文档ID列表
         ids = []
-
+        # 开始批量添加文档到向量索引集合
         with self._client.batch as batch:
             for i, text in enumerate(texts):
+                # 准备数据属性，至少包含文本字段
                 data_properties = {Field.TEXT_KEY.value: text}
+                # 如果有元数据，则添加到数据属性中
                 if metadatas is not None:
                     for key, val in metadatas[i].items():
                         data_properties[key] = self._json_serializable(val)
-
+                # 将文档添加到向量索引集合中
                 batch.add_data_object(
                     data_object=data_properties,
                     class_name=self._collection_name,
                     uuid=uuids[i],
                     vector=embeddings[i] if embeddings else None,
                 )
+                # 记录文档的UUID
                 ids.append(uuids[i])
+        # 返回文档的UUID列表
         return ids
 
     def delete_by_metadata_field(self, key: str, value: str):
@@ -239,8 +267,7 @@ class WeaviateVector(BaseVector):
         query_obj = self._client.query.get(collection_name, properties)
         if kwargs.get("where_filter"):
             query_obj = query_obj.with_where(kwargs.get("where_filter"))
-        if kwargs.get("additional"):
-            query_obj = query_obj.with_additional(kwargs.get("additional"))
+        query_obj = query_obj.with_additional(["vector"])
         properties = ['text']
         result = query_obj.with_bm25(query=query, properties=properties).with_limit(kwargs.get('top_k', 2)).do()
         if "errors" in result:
@@ -248,7 +275,8 @@ class WeaviateVector(BaseVector):
         docs = []
         for res in result["data"]["Get"][collection_name]:
             text = res.pop(Field.TEXT_KEY.value)
-            docs.append(Document(page_content=text, metadata=res))
+            additional = res.pop('_additional')
+            docs.append(Document(page_content=text, vector=additional['vector'], metadata=res))
         return docs
 
     def _default_schema(self, index_name: str) -> dict:

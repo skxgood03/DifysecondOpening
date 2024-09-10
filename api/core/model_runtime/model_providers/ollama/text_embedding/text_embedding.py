@@ -72,7 +72,7 @@ class OllamaEmbeddingModel(TextEmbeddingModel):
             num_tokens = self._get_num_tokens_by_gpt2(text)
 
             if num_tokens >= context_size:
-                cutoff = int(len(text) * (np.floor(context_size / num_tokens)))
+                cutoff = int(np.floor(len(text) * (context_size / num_tokens)))
                 # if num tokens is larger than context length, only use the start
                 inputs.append(text[0: cutoff])
             else:
@@ -89,7 +89,8 @@ class OllamaEmbeddingModel(TextEmbeddingModel):
             endpoint_url,
             headers=headers,
             data=json.dumps(payload),
-            timeout=(10, 300)
+            timeout=(10, 300),
+            options={"use_mmap": "true"}
         )
 
         response.raise_for_status()  # Raise an exception for HTTP errors

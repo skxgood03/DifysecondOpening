@@ -68,7 +68,7 @@
       "name": "Русский (Россия)",
       "prompt_name": "Russian",
       "example": " Привет, Dify!",
-      "supported": false
+      "supported": true
     },
     {
       "value": "it-IT",
@@ -132,6 +132,13 @@
       "prompt_name": "Türkçe",
       "example": "Selam!",
       "supported": "true"
+    },
+    {
+      "value": "fa-IR",
+      "name": "Farsi (Iran)",
+      "prompt_name": "Farsi",
+      "example": "سلام, دیفای!",
+      "supported": true
     }
   ]
 }

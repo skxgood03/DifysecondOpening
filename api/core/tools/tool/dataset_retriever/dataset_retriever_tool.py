@@ -2,7 +2,7 @@
 from pydantic import BaseModel, Field
 
 from core.rag.datasource.retrieval_service import RetrievalService
-from core.rag.retrieval.retrival_methods import RetrievalMethod
+from core.rag.retrieval.retrieval_methods import RetrievalMethod
 from core.tools.tool.dataset_retriever.dataset_retriever_base_tool import DatasetRetrieverBaseTool
 from extensions.ext_database import db
 from models.dataset import Dataset, Document, DocumentSegment
@@ -14,6 +14,7 @@ default_retrieval_model = {
         'reranking_provider_name': '',
         'reranking_model_name': ''
     },
+    'reranking_mode': 'reranking_model',
     'top_k': 2,
     'score_threshold_enabled': False
 }
@@ -62,7 +63,7 @@ class DatasetRetrieverTool(DatasetRetrieverBaseTool):
         retrieval_model = dataset.retrieval_model if dataset.retrieval_model else default_retrieval_model
         if dataset.indexing_technique == "economy":
             # use keyword table query
-            documents = RetrievalService.retrieve(retrival_method='keyword_search',
+            documents = RetrievalService.retrieve(retrieval_method='keyword_search',
                                                   dataset_id=dataset.id,
                                                   query=query,
                                                   top_k=self.top_k
@@ -71,14 +72,16 @@ class DatasetRetrieverTool(DatasetRetrieverBaseTool):
         else:
             if self.top_k > 0:
                 # retrieval source
-                documents = RetrievalService.retrieve(retrival_method=retrieval_model['search_method'],
+                documents = RetrievalService.retrieve(retrieval_method=retrieval_model.get('search_method', 'semantic_search'),
                                                       dataset_id=dataset.id,
                                                       query=query,
                                                       top_k=self.top_k,
-                                                      score_threshold=retrieval_model['score_threshold']
+                                                      score_threshold=retrieval_model.get('score_threshold', .0)
                                                       if retrieval_model['score_threshold_enabled'] else None,
-                                                      reranking_model=retrieval_model['reranking_model']
+                                                      reranking_model=retrieval_model.get('reranking_model', None)
                                                       if retrieval_model['reranking_enable'] else None,
+                                                      reranking_mode=retrieval_model.get('reranking_mode')
+                                                      if retrieval_model.get('reranking_mode') else 'reranking_model',
                                                       weights=retrieval_model.get('weights', None),
                                                       )
             else:

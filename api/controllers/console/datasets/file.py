@@ -21,7 +21,6 @@ PREVIEW_WORDS_LIMIT = 3000
 
 
 class FileApi(Resource):
-
     @setup_required
     @login_required
     @account_initialization_required
@@ -31,32 +30,31 @@ class FileApi(Resource):
         batch_count_limit = dify_config.UPLOAD_FILE_BATCH_LIMIT
         image_file_size_limit = dify_config.UPLOAD_IMAGE_FILE_SIZE_LIMIT
         return {
-            'file_size_limit': file_size_limit,
-            'batch_count_limit': batch_count_limit,
-            'image_file_size_limit': image_file_size_limit
+            "file_size_limit": file_size_limit,
+            "batch_count_limit": batch_count_limit,
+            "image_file_size_limit": image_file_size_limit,
         }, 200
 
     @setup_required
     @login_required
     @account_initialization_required
     @marshal_with(file_fields)
-    @cloud_edition_billing_resource_check(resource='documents')
+    @cloud_edition_billing_resource_check("documents")
     def post(self):
-
         # get file from request
-        file = request.files['file']
+        file = request.files['file']  # 获取文件
 
         # check file
-        if 'file' not in request.files:
+        if "file" not in request.files:
             raise NoFileUploadedError()
 
-        if len(request.files) > 1:
+        if len(request.files) > 1:  # 文件数量限制
             raise TooManyFilesError()
         try:
-            upload_file = FileService.upload_file(file, current_user)
-        except services.errors.file.FileTooLargeError as file_too_large_error:
+            upload_file = FileService.upload_file(file, current_user)  # 上传
+        except services.errors.file.FileTooLargeError as file_too_large_error: #文件过大
             raise FileTooLargeError(file_too_large_error.description)
-        except services.errors.file.UnsupportedFileTypeError:
+        except services.errors.file.UnsupportedFileTypeError: #不支持的文件类型
             raise UnsupportedFileTypeError()
 
         return upload_file, 201
@@ -69,7 +67,7 @@ class FilePreviewApi(Resource):
     def get(self, file_id):
         file_id = str(file_id)
         text = FileService.get_file_preview(file_id)
-        return {'content': text}
+        return {"content": text}
 
 
 class FileSupportTypeApi(Resource):
@@ -78,10 +76,10 @@ class FileSupportTypeApi(Resource):
     @account_initialization_required
     def get(self):
         etl_type = dify_config.ETL_TYPE
-        allowed_extensions = UNSTRUCTURED_ALLOWED_EXTENSIONS if etl_type == 'Unstructured' else ALLOWED_EXTENSIONS
-        return {'allowed_extensions': allowed_extensions}
+        allowed_extensions = UNSTRUCTURED_ALLOWED_EXTENSIONS if etl_type == "Unstructured" else ALLOWED_EXTENSIONS
+        return {"allowed_extensions": allowed_extensions}
 
 
-api.add_resource(FileApi, '/files/upload')
-api.add_resource(FilePreviewApi, '/files/<uuid:file_id>/preview')
-api.add_resource(FileSupportTypeApi, '/files/support-type')
+api.add_resource(FileApi, "/files/upload")
+api.add_resource(FilePreviewApi, "/files/<uuid:file_id>/preview")
+api.add_resource(FileSupportTypeApi, "/files/support-type")

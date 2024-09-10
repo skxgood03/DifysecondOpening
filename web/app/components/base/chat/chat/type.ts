@@ -8,13 +8,19 @@ export type MessageMore = {
   latency: number | string
 }
 
-export type Feedbacktype = {
+export type FeedbackType = {
   rating: MessageRating
   content?: string | null
 }
 
-export type FeedbackFunc = (messageId: string, feedback: Feedbacktype) => Promise<any>
-export type SubmitAnnotationFunc = (messageId: string, content: string) => Promise<any>
+export type FeedbackFunc = (
+  messageId: string,
+  feedback: FeedbackType
+) => Promise<any>
+export type SubmitAnnotationFunc = (
+  messageId: string,
+  content: string
+) => Promise<any>
 
 export type DisplayScene = 'web' | 'console'
 
@@ -65,11 +71,11 @@ export type IChatItem = {
   /**
    * The user feedback result of this message
    */
-  feedback?: Feedbacktype
+  feedback?: FeedbackType
   /**
    * The admin feedback result of this message
    */
-  adminFeedback?: Feedbacktype
+  adminFeedback?: FeedbackType
   /**
    * Whether to hide the feedback area
    */
@@ -91,18 +97,20 @@ export type IChatItem = {
   input?: any
 }
 
-export type MessageEnd = {
-  id: string
-  metadata: {
-    retriever_resources?: CitationItem[]
-    annotation_reply: {
+export type Metadata = {
+  retriever_resources?: CitationItem[]
+  annotation_reply: {
+    id: string
+    account: {
       id: string
-      account: {
-        id: string
-        name: string
-      }
+      name: string
     }
   }
+}
+
+export type MessageEnd = {
+  id: string
+  metadata: Metadata
 }
 
 export type MessageReplace = {
